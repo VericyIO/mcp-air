@@ -128,7 +128,7 @@ Full scope reference: [Authentication guide](https://air.thalus.ai/docs/guides/a
 
 Logs (macOS): `~/Library/Logs/Claude/mcp*.log`
 
-Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/mcp-air-setup)
+Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/guides/mcp-air-setup)
 
 ## Capabilities
 
@@ -185,7 +185,7 @@ pnpm test
 
 | Resource | URL |
 | -------- | --- |
-| MCP setup guide | [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/mcp-air-setup) |
+| MCP setup guide | [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/guides/mcp-air-setup) |
 | Integrator API guides | [air.thalus.ai/docs/guides/getting-started](https://air.thalus.ai/docs/guides/getting-started) |
 | API reference | [air.thalus.ai/docs/api-reference](https://air.thalus.ai/docs/api-reference/) |
 | Agent skills (optional) | [github.com/VericyIO/thalus-air-skills](https://github.com/VericyIO/thalus-air-skills) |

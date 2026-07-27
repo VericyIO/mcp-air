@@ -13,7 +13,7 @@
     "type": "git",
     "url": "git+https://github.com/VericyIO/mcp-air.git"
   },
-  "homepage": "https://air.thalus.ai/docs/mcp-air-setup",
+  "homepage": "https://air.thalus.ai/docs/guides/mcp-air-setup",
   "keywords": [
     "mcp",
     "modelcontextprotocol",
