@@ -1,8 +1,12 @@
 {
   "name": "@thalus-ai/mcp-air",
   "version": "1.0.1",
-  "description": "Local MCP server for AIR assessments and integrator API workflows",
+  "description": "MCP server for AIR (AI Responsibly) — run risk assessments from Cursor, Claude Code, VS Code, and other MCP clients.",
   "license": "MIT",
+  "author": "Thalus <developer@thalus.ai>",
+  "bugs": {
+    "url": "https://github.com/VericyIO/mcp-air/issues"
+  },
   "type": "module",
   "mcpName": "io.github.thalus/air-assessments",
   "repository": {
@@ -48,5 +52,9 @@
     "typescript": "6.0.3",
     "vitest": "4.1.7"
   },
-  "packageManager": "pnpm@11.4.0"
+  "packageManager": "pnpm@11.4.0",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

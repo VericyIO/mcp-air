@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'mcp-air-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
 
 concurrency:
   group: publish-mcp-air-${{ github.ref }}
@@ -50,6 +55,6 @@ jobs:
         run: npm pack
 
       - name: Publish to npm
-        run: npm publish thalus-ai-mcp-air-*.tgz --access public
+        run: npm publish thalus-ai-mcp-air-*.tgz --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
