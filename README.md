@@ -67,14 +67,7 @@ AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-a
 
 ## Configuration
 
-### Environment variables
-
-| Variable | Required | Default | Description |
-| -------- | -------- | ------- | ----------- |
-| `AIR_API_KEY` | Yes | — | Domain-scoped bearer API key from the AIR portal |
-| `AIR_API_URL` | No | `https://api.air.thalus.ai` | Integrator API base URL. Override only for [local development](#development) or staging (`https://api.air-dev.thalus.ai`). |
-
-> **Note:** `https://api.air.thalus.ai` is the API **base URL** (health check: `GET /` returns `{"name":"air-api","status":"ok",...}`). For human-readable API documentation, use the links in [Documentation](#documentation) below — not the bare API origin.
+You only need **`AIR_API_KEY`**. The server connects to production AIR automatically.
 
 ### API key scopes
 
@@ -155,33 +148,21 @@ See the [Integration flow guide](https://air.thalus.ai/docs/guides/integration-f
 
 ## Development
 
-Clone and run from source:
+Contributors: see [AGENTS.md](./AGENTS.md) for build, test, publish, and optional `AIR_API_URL` override.
 
 ```bash
 git clone https://github.com/VericyIO/mcp-air.git
-cd mcp-air
-pnpm install
-pnpm build
-AIR_API_KEY=your-key node dist/build/index.mjs
-```
-
-Point your MCP client at `dist/build/index.mjs` instead of `npx`. For local AIR API development, set `AIR_API_URL=http://localhost:4001`.
-
-```bash
-pnpm typecheck   # TypeScript
-pnpm test        # Unit and protocol tests
-pnpm prepublishOnly  # Build + bundle verification
+cd mcp-air && pnpm install && pnpm build
+pnpm test
 ```
 
 ## Documentation
 
 | Resource | URL |
 | -------- | --- |
-| MCP setup guide (detailed) | [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/mcp-air-setup) |
-| Integrator API getting started | [air.thalus.ai/docs/guides/getting-started](https://air.thalus.ai/docs/guides/getting-started) |
-| API reference (OpenAPI) | [air.thalus.ai/docs/api-reference](https://air.thalus.ai/docs/api-reference/) |
-| Interactive API explorer | [api.air.thalus.ai/docs](https://api.air.thalus.ai/docs) |
-| OpenAPI JSON | [api.air.thalus.ai/openapi.json](https://api.air.thalus.ai/openapi.json) |
+| MCP setup guide | [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/mcp-air-setup) |
+| Integrator API guides | [air.thalus.ai/docs/guides/getting-started](https://air.thalus.ai/docs/guides/getting-started) |
+| API reference | [air.thalus.ai/docs/api-reference](https://air.thalus.ai/docs/api-reference/) |
 | Agent skills (optional) | [github.com/VericyIO/thalus-air-skills](https://github.com/VericyIO/thalus-air-skills) |
 
 ## Security

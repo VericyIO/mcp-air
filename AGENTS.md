@@ -26,3 +26,7 @@ Requires `NPM_TOKEN` GitHub secret with publish access to `@thalus-ai/mcp-air`.
 ## Constants sync
 
 Integrator scope strings in `src/constants.ts` must stay aligned with AIR API definitions in the private [thalus-apps](https://github.com/VericyIO/thalus-apps) repo (`packages/domain/src/air/config/api-key-scopes.ts`, `public-docs.ts`). Drift is checked from thalus-apps CI.
+
+## Local API override (contributors only)
+
+Optional env var `AIR_API_URL` overrides the default production API origin. Use only when developing against a non-production AIR API stack. End users should not set this.
