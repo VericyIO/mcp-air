@@ -76,3 +76,16 @@ Source: [github.com/VericyIO/mcp-air](https://github.com/VericyIO/mcp-air)
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+## Publishing (maintainers)
+
+1. Add `NPM_TOKEN` (publish access to `@thalus-ai`) as a GitHub secret on this repo.
+2. Bump `version` in `package.json` and `server.json`.
+3. Tag and push:
+
+```bash
+git tag mcp-air-v1.0.1
+git push origin mcp-air-v1.0.1
+```
+
+GitHub Actions runs tests, builds, and publishes to npm.
