@@ -1,0 +1,28 @@
+# AGENTS.md
+
+## Verification Commands
+
+- `pnpm typecheck` — TypeScript check
+- `pnpm test` — Vitest unit and protocol tests
+- `pnpm build` — Bundle to `dist/build/index.mjs`
+- `pnpm verify:bundle` — Ensure published bundle has no workspace imports
+- `pnpm prepublishOnly` — Build + bundle verify (runs before npm publish)
+
+## Node Version
+
+Node.js 20+ required. CI uses Node 24.
+
+## Publishing
+
+Tag push triggers `.github/workflows/publish.yml`:
+
+```bash
+git tag mcp-air-v1.0.1
+git push origin mcp-air-v1.0.1
+```
+
+Requires `NPM_TOKEN` GitHub secret with publish access to `@thalus-ai/mcp-air`.
+
+## Constants sync
+
+Integrator scope strings in `src/constants.ts` must stay aligned with AIR API definitions in the private [thalus-apps](https://github.com/VericyIO/thalus-apps) repo (`packages/domain/src/air/config/api-key-scopes.ts`, `public-docs.ts`). Drift is checked from thalus-apps CI.

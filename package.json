@@ -1,0 +1,52 @@
+{
+  "name": "@thalus-ai/mcp-air",
+  "version": "1.0.1",
+  "description": "Local MCP server for AIR assessments and integrator API workflows",
+  "license": "MIT",
+  "type": "module",
+  "mcpName": "io.github.thalus/air-assessments",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VericyIO/mcp-air.git"
+  },
+  "homepage": "https://air.thalus.ai/docs/mcp-air-setup",
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "air",
+    "thalus",
+    "assessments",
+    "integrator-api"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "mcp-server-air": "./dist/build/index.mjs"
+  },
+  "files": [
+    "dist/build/index.mjs",
+    "server.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "pnpm build && node dist/build/index.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "verify:bundle": "node scripts/verify-bundle-no-workspace-imports.mjs",
+    "prepublishOnly": "pnpm run build && pnpm run verify:bundle"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "25.6.0",
+    "tsdown": "0.22.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.7"
+  },
+  "packageManager": "pnpm@11.4.0"
+}
