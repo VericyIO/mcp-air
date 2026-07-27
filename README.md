@@ -3,17 +3,18 @@
 [![npm version](https://img.shields.io/npm/v/@thalus-ai/mcp-air.svg)](https://www.npmjs.com/package/@thalus-ai/mcp-air)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-Connect AI assistants to [AIR](https://air.thalus.ai) (AI Responsibly) for governed risk assessments: discover projects, upload evidence, run assessments, and retrieve structured reports — from Cursor, Claude Desktop, VS Code, or any [Model Context Protocol](https://modelcontextprotocol.io/) client.
+Connect AI assistants to [AIR](https://air.thalus.ai) (AI Responsibly) for governed risk assessments: discover projects, upload evidence, run assessments, and retrieve structured reports — from **Cursor**, **Claude Code**, **Claude Desktop**, **VS Code**, **Windsurf**, or any [Model Context Protocol](https://modelcontextprotocol.io/) client.
 
 This package runs **locally** as a stdio MCP server. Assessment workloads execute on Thalus cloud infrastructure via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). You provide a domain-scoped API key; no local database, worker, or Docker stack is required.
 
 ## Overview
 
 ```
-┌─────────────────┐     stdio MCP      ┌──────────────────┐     HTTPS      ┌─────────────────┐
-│  Cursor / Claude │ ◄────────────────► │  @thalus-ai/     │ ─────────────► │  AIR Integrator │
-│  / VS Code       │                    │  mcp-air (local) │                │  API (cloud)    │
-└─────────────────┘                    └──────────────────┘                └─────────────────┘
+┌──────────────────────┐   stdio MCP   ┌──────────────────┐   HTTPS   ┌─────────────────┐
+│  Your IDE / agent    │ ◄────────────► │  @thalus-ai/     │ ────────► │  AIR Integrator │
+│  (Cursor, Claude,    │               │  mcp-air (local) │           │  API (cloud)    │
+│   VS Code, …)        │               └──────────────────┘           └─────────────────┘
+└──────────────────────┘
 ```
 
 | Component | Role |
@@ -36,7 +37,9 @@ In the [AIR portal](https://air.thalus.ai): open your domain → **API Keys** �
 
 ### 2. Configure your MCP client
 
-**Cursor** — add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
+Add the server to whichever client you use. All clients run the same `npx` command; only the config file and JSON root key differ.
+
+**Most clients** (Cursor, Claude Code, Claude Desktop, Windsurf) — `mcpServers`:
 
 ```json
 {
@@ -53,7 +56,24 @@ In the [AIR portal](https://air.thalus.ai): open your domain → **API Keys** �
 }
 ```
 
-Set `AIR_API_KEY` in your shell environment, or use `envFile` to load it from a file. Restart the client after saving.
+**VS Code** — `servers` in `.vscode/mcp.json` ([docs](https://code.visualstudio.com/docs/agent-customization/mcp-servers)):
+
+```json
+{
+  "servers": {
+    "air": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@thalus-ai/mcp-air@1.0.0"],
+      "env": {
+        "AIR_API_KEY": "${env:AIR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Set `AIR_API_KEY` in your shell, or use `envFile` where supported. See [Client setup](#client-setup) for file paths per IDE.
 
 ### 3. Verify
 
@@ -90,20 +110,25 @@ Full scope reference: [Authentication guide](https://air.thalus.ai/docs/guides/a
 
 ## Client setup
 
-### Claude Desktop
+| Client | Config file | Notes |
+| ------ | ----------- | ----- |
+| **Cursor** | `.cursor/mcp.json` or `~/.cursor/mcp.json` | Restart after changes |
+| **Claude Code** | `.mcp.json` or `~/.claude.json` | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.0.0` — [docs](https://code.claude.com/docs/en/mcp) |
+| **Claude Desktop** | See platform paths below | Quit and reopen the app |
+| **VS Code** | `.vscode/mcp.json` or user config via **MCP: Open User Configuration** | Use Copilot **Agent** mode; root key is `servers` |
+| **Windsurf** | `~/.codeium/windsurf/mcp_config.json` | Same `mcpServers` JSON as Cursor |
+| **Other** | Your client's MCP docs | Same `command`, `args`, and `AIR_API_KEY` |
 
-Use the same `mcpServers` JSON as Cursor. Config file locations:
+### Claude Desktop paths
 
 | Platform | Path |
 | -------- | ---- |
 | macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 
-Restart Claude Desktop after changes. Logs: `~/Library/Logs/Claude/mcp*.log` (macOS).
+Logs (macOS): `~/Library/Logs/Claude/mcp*.log`
 
-### VS Code
-
-Add the server to your MCP configuration per [VS Code MCP documentation](https://code.visualstudio.com/docs/copilot/customization/mcp-servers). Use the same `npx` command and `AIR_API_KEY` environment variable as above.
+Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/mcp-air-setup)
 
 ## Capabilities
 
