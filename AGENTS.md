@@ -1,5 +1,16 @@
 # AGENTS.md
 
+## Git identity
+
+All commits on this repository must use the **raul-thalus** GitHub identity:
+
+```bash
+git config user.name "raul-thalus"
+git config user.email "rahul@thalus.ai"
+```
+
+Run those in this repo root (they are repo-local, not global). Do not commit with personal GitHub emails — GitHub attributes those to the wrong account on the Contributors list.
+
 ## Verification Commands
 
 - `pnpm typecheck` — TypeScript check
