@@ -27,7 +27,7 @@ export const formatIntegratorApiError = (status: number, body: string): string =
 
   switch (status) {
     case 401:
-      return `AIR API authentication failed (401). Verify ${'AIR_API_KEY'} is valid and not revoked. See https://air.thalus.ai/docs/public-api/getting-started`
+      return `AIR API authentication failed (401). Verify ${'AIR_API_KEY'} is valid and not revoked. See https://air.thalus.ai/docs/guides/getting-started`
     case 403:
       return `AIR API forbidden (403). Your API key may lack the required scope for this operation. Use assessmentRunner for assess-only flows or fullPipeline for uploads, search, and portfolio. Response: ${detail}`
     case 402:
@@ -76,7 +76,7 @@ const scopeHints: Readonly<Record<string, string>> = {
 
 export const scopeHintForTool = (toolName: string): string =>
   scopeHints[toolName] ??
-  'See https://air.thalus.ai/docs/public-api/authentication for scope presets'
+  'See https://air.thalus.ai/docs/guides/authentication for scope presets'
 
 export const formatHandlerError = (error: unknown, handlerName: string): string => {
   const hint = scopeHintForTool(handlerName)
