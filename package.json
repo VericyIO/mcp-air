@@ -1,6 +1,6 @@
 {
   "name": "@thalus-ai/mcp-air",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "MCP server for AIR (AI Responsibly) — run risk assessments from Cursor, Claude Code, VS Code, and other MCP clients.",
   "license": "MIT",
   "author": "Thalus <developer@thalus.ai>",
@@ -26,10 +26,18 @@
     "node": ">=20"
   },
   "bin": {
-    "mcp-server-air": "./dist/build/index.mjs"
+    "mcp-server-air": "./dist/build/index.mjs",
+    "mcp-server-air-http": "./dist/build/http.mjs"
+  },
+  "exports": {
+    ".": "./dist/build/server.mjs",
+    "./stdio": "./dist/build/index.mjs",
+    "./http": "./dist/build/http.mjs"
   },
   "files": [
     "dist/build/index.mjs",
+    "dist/build/http.mjs",
+    "dist/build/server.mjs",
     "server.json",
     "README.md",
     "LICENSE"
@@ -47,6 +55,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "25.6.0",
     "tsdown": "0.22.1",
     "typescript": "6.0.3",

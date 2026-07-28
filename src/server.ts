@@ -11,8 +11,10 @@ import { registerCompositeTools } from './tools/composites.js'
 import { registerDiscoverTools } from './tools/discover.js'
 import { registerDocumentTools } from './tools/documents.js'
 import { registerPortfolioTools } from './tools/portfolio.js'
+import type { McpAirSurface } from './surface.js'
 
 export type CreateAirMcpServerOptions = {
+  readonly surface?: McpAirSurface
   readonly taskStore?: TaskStore
   readonly api?: IntegratorApiClient
 }
@@ -21,6 +23,7 @@ export const createAirMcpServer = (
   config: McpAirConfig,
   options: CreateAirMcpServerOptions = {},
 ) => {
+  const surface = options.surface ?? 'local'
   const api = options.api ?? createIntegratorApiClient(config.apiUrl, config.apiKey)
   const taskStore = options.taskStore ?? new InMemoryTaskStore()
 
@@ -45,7 +48,7 @@ export const createAirMcpServer = (
   registerDocumentTools(server, api)
   registerAssessmentTools(server, api)
   registerPortfolioTools(server, api)
-  registerCompositeTools(server, api)
+  registerCompositeTools(server, api, surface)
   registerReportResources(server, api)
   registerAssessmentPrompts(server)
 

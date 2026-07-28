@@ -12,11 +12,12 @@ import {
 } from '../config.js'
 import { standardAirTaskHandlers } from '../tasks/task-handlers.js'
 import {
-  runAssessmentFromFileTask,
   runFullAssessmentPipelineTask,
   runWaitForAssessmentTask,
   runWaitForDocumentExtractionTask,
 } from '../tasks/workers.js'
+import type { McpAirSurface } from '../surface.js'
+import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
 const writeHint = {
   readOnlyHint: false,
@@ -35,11 +36,15 @@ const requiredTaskExecution = {
   taskSupport: 'required' as const,
 }
 
-export const registerCompositeTools = (server: McpServer, api: IntegratorApiClient) => {
+export const registerCompositeTools = (
+  server: McpServer,
+  api: IntegratorApiClient,
+  surface: McpAirSurface = 'local',
+) => {
   server.experimental.tasks.registerToolTask(
     'air_wait_for_document_extraction',
     {
-      title: 'Wait for document extraction',
+      title: MCP_AIR_TOOL_TITLES.air_wait_for_document_extraction,
       description:
         'Poll air_list_documents until sourcePid reaches connected or error, or timeout. Returns an MCP Task handle immediately; poll tasks/get until completed. Uses exponential backoff per async-jobs guidance.',
       inputSchema: {
@@ -79,7 +84,7 @@ export const registerCompositeTools = (server: McpServer, api: IntegratorApiClie
   server.experimental.tasks.registerToolTask(
     'air_wait_for_assessment',
     {
-      title: 'Wait for assessment',
+      title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment,
       description:
         'Poll air_get_assessment until completed, failed, or reportAvailable, or timeout. Returns an MCP Task handle immediately; poll tasks/get until completed. Uses exponential backoff per async-jobs guidance.',
       inputSchema: {
@@ -108,52 +113,55 @@ export const registerCompositeTools = (server: McpServer, api: IntegratorApiClie
     },
   )
 
-  server.experimental.tasks.registerToolTask(
-    'air_run_assessment_from_file',
-    {
-      title: 'Run assessment from local file',
-      description:
-        'Upload a local file, wait for extraction, start assessment on the new artifact. Consumes credits. Requires projects:write and assessments:write. Returns an MCP Task handle immediately. Reads filePath with your OS user permissions.',
-      inputSchema: {
-        projectPid: z.string(),
-        filePath: z.string().describe('Absolute or relative path to a local document file'),
-        name: z.string().optional().describe('Assessment name (defaults to filename)'),
-        contentType: z
-          .string()
-          .optional()
-          .describe('MIME type (inferred from extension when omitted)'),
+  if (surface === 'local') {
+    server.experimental.tasks.registerToolTask(
+      'air_run_assessment_from_file',
+      {
+        title: MCP_AIR_TOOL_TITLES.air_run_assessment_from_file,
+        description:
+          'Upload a local file, wait for extraction, start assessment on the new artifact. Consumes credits. Requires projects:write and assessments:write. Returns an MCP Task handle immediately. Reads filePath with your OS user permissions.',
+        inputSchema: {
+          projectPid: z.string(),
+          filePath: z.string().describe('Absolute or relative path to a local document file'),
+          name: z.string().optional().describe('Assessment name (defaults to filename)'),
+          contentType: z
+            .string()
+            .optional()
+            .describe('MIME type (inferred from extension when omitted)'),
+        },
+        annotations: { ...writeHint, destructiveHint: true },
+        execution: requiredTaskExecution,
       },
-      annotations: writeHint,
-      execution: requiredTaskExecution,
-    },
-    {
-      async createTask(
-        { projectPid, filePath, name, contentType },
-        { taskStore, taskRequestedTtl },
-      ) {
-        const task = await taskStore.createTask({
-          ttl: taskRequestedTtl ?? MCP_AIR_ASSESSMENT_TASK_TTL_MS,
-          pollInterval: MCP_AIR_DOCUMENT_EXTRACTION_POLL_INTERVAL_MS,
-        })
-        void runAssessmentFromFileTask(
-          api,
-          taskStore,
-          task.taskId,
-          projectPid,
-          filePath,
-          name,
-          contentType,
-        )
-        return { task }
+      {
+        async createTask(
+          { projectPid, filePath, name, contentType },
+          { taskStore, taskRequestedTtl },
+        ) {
+          const { runAssessmentFromFileTask } = await import('../tasks/workers.js')
+          const task = await taskStore.createTask({
+            ttl: taskRequestedTtl ?? MCP_AIR_ASSESSMENT_TASK_TTL_MS,
+            pollInterval: MCP_AIR_DOCUMENT_EXTRACTION_POLL_INTERVAL_MS,
+          })
+          void runAssessmentFromFileTask(
+            api,
+            taskStore,
+            task.taskId,
+            projectPid,
+            filePath,
+            name,
+            contentType,
+          )
+          return { task }
+        },
+        ...standardAirTaskHandlers,
       },
-      ...standardAirTaskHandlers,
-    },
-  )
+    )
+  }
 
   server.experimental.tasks.registerToolTask(
     'air_run_full_assessment_pipeline',
     {
-      title: 'Run full assessment pipeline',
+      title: MCP_AIR_TOOL_TITLES.air_run_full_assessment_pipeline,
       description:
         'Start assessment on existing artifacts, wait for completion, return report summary. Consumes credits. Returns an MCP Task handle immediately; poll tasks/get until completed.',
       inputSchema: {
@@ -162,7 +170,7 @@ export const registerCompositeTools = (server: McpServer, api: IntegratorApiClie
         name: z.string(),
         waitTimeoutMs: z.number().int().positive().optional(),
       },
-      annotations: writeHint,
+      annotations: { ...writeHint, destructiveHint: true },
       execution: requiredTaskExecution,
     },
     {

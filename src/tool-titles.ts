@@ -1,0 +1,30 @@
+import { MCP_AIR_EXPECTED_TOOL_NAMES } from './capabilities.js'
+
+/** Human-readable MCP tool titles (Claude Directory requirement). */
+export const MCP_AIR_TOOL_TITLES = {
+  air_list_domains: 'List domains',
+  air_get_domain: 'Get domain',
+  air_list_projects: 'List projects',
+  air_get_project: 'Get project',
+  air_create_project: 'Create project',
+  air_search: 'Search',
+  air_list_documents: 'List documents',
+  air_get_document_download_url: 'Get document download URL',
+  air_list_artifacts: 'List artifacts',
+  air_get_artifact_text: 'Get artifact text',
+  air_upload_document_init: 'Initialize document upload',
+  air_upload_document_complete: 'Complete document upload',
+  air_list_assessments: 'List assessments',
+  air_get_assessment: 'Get assessment',
+  air_get_assessment_report: 'Get assessment report',
+  air_get_assessment_stages: 'Get assessment stages',
+  air_get_assessment_input_artifacts: 'Get assessment input artifacts',
+  air_create_assessment_draft: 'Create assessment draft',
+  air_start_assessment: 'Start assessment',
+  air_retry_assessment: 'Retry assessment',
+  air_get_domain_portfolio: 'Get domain portfolio',
+  air_wait_for_document_extraction: 'Wait for document extraction',
+  air_wait_for_assessment: 'Wait for assessment',
+  air_run_assessment_from_file: 'Run assessment from local file',
+  air_run_full_assessment_pipeline: 'Run full assessment pipeline',
+} as const satisfies Record<(typeof MCP_AIR_EXPECTED_TOOL_NAMES)[number], string>

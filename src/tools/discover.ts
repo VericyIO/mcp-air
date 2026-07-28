@@ -5,6 +5,7 @@ import { findProjectByPid } from '../client/find-project.js'
 import type { IntegratorApiClient } from '../client/integrator-api.js'
 import { MCP_AIR_DEFAULT_LIST_LIMIT } from '../config.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
+import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
 const readOnly = {
   readOnlyHint: true,
@@ -19,11 +20,15 @@ const writeHint = {
 } as const
 
 export const registerDiscoverTools = (server: McpServer, api: IntegratorApiClient) => {
-  server.tool(
+  server.registerTool(
     'air_list_domains',
-    'List domains visible to the API key. For domain-scoped service account keys, returns the single bound domain. Requires domains:read scope.',
-    {},
-    readOnly,
+    {
+      title: MCP_AIR_TOOL_TITLES.air_list_domains,
+      description:
+        'List domains visible to the API key. For domain-scoped service account keys, returns the single bound domain. Requires domains:read scope.',
+      inputSchema: {},
+      annotations: readOnly,
+    },
     async () => {
       try {
         return toolJsonResult(await api.listDomains())
@@ -33,15 +38,19 @@ export const registerDiscoverTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_get_domain',
-    'Resolve a domain by pid from air_list_domains results, or by orgSlug + domainSlug via slug lookup.',
     {
-      domainPid: z.string().optional().describe('Domain pid from air_list_domains'),
-      orgSlug: z.string().optional().describe('Organization slug for lookup'),
-      domainSlug: z.string().optional().describe('Domain slug for lookup'),
+      title: MCP_AIR_TOOL_TITLES.air_get_domain,
+      description:
+        'Resolve a domain by pid from air_list_domains results, or by orgSlug + domainSlug via slug lookup.',
+      inputSchema: {
+        domainPid: z.string().optional().describe('Domain pid from air_list_domains'),
+        orgSlug: z.string().optional().describe('Organization slug for lookup'),
+        domainSlug: z.string().optional().describe('Domain slug for lookup'),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ domainPid, orgSlug, domainSlug }) => {
       try {
         if (orgSlug !== undefined && domainSlug !== undefined) {
@@ -65,16 +74,20 @@ export const registerDiscoverTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_list_projects',
-    'List projects in a domain (paginated). Requires domains:read and projects:read. Use domainPid from air_list_domains.',
     {
-      domainPid: z.string().describe('Domain pid'),
-      page: z.number().int().min(1).optional().describe('Page number (default 1)'),
-      pageSize: z.number().int().min(1).max(100).optional().describe('Page size (default 20)'),
-      search: z.string().optional().describe('Filter projects by name'),
+      title: MCP_AIR_TOOL_TITLES.air_list_projects,
+      description:
+        'List projects in a domain (paginated). Requires domains:read and projects:read. Use domainPid from air_list_domains.',
+      inputSchema: {
+        domainPid: z.string().describe('Domain pid'),
+        page: z.number().int().min(1).optional().describe('Page number (default 1)'),
+        pageSize: z.number().int().min(1).max(100).optional().describe('Page size (default 20)'),
+        search: z.string().optional().describe('Filter projects by name'),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ domainPid, page, pageSize, search }) => {
       try {
         const query = {
@@ -89,16 +102,20 @@ export const registerDiscoverTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_get_project',
-    'Resolve a project by pid from air_list_projects, or by orgSlug + domainSlug + projectSlug.',
     {
-      projectPid: z.string().optional().describe('Project pid from air_list_projects'),
-      orgSlug: z.string().optional(),
-      domainSlug: z.string().optional(),
-      projectSlug: z.string().optional(),
+      title: MCP_AIR_TOOL_TITLES.air_get_project,
+      description:
+        'Resolve a project by pid from air_list_projects, or by orgSlug + domainSlug + projectSlug.',
+      inputSchema: {
+        projectPid: z.string().optional().describe('Project pid from air_list_projects'),
+        orgSlug: z.string().optional(),
+        domainSlug: z.string().optional(),
+        projectSlug: z.string().optional(),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ projectPid, orgSlug, domainSlug, projectSlug }) => {
       try {
         if (orgSlug !== undefined && domainSlug !== undefined && projectSlug !== undefined) {
@@ -121,16 +138,20 @@ export const registerDiscoverTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_create_project',
-    'Create a project in a domain. Requires domains:write (fullPipeline preset). Returns project pid and slug.',
     {
-      domainPid: z.string().describe('Domain pid from air_list_domains'),
-      name: z.string().min(1).describe('Display name for the project'),
-      slug: z.string().min(1).describe('URL-safe slug (unique within the domain)'),
-      description: z.string().optional().describe('Optional project description'),
+      title: MCP_AIR_TOOL_TITLES.air_create_project,
+      description:
+        'Create a project in a domain. Requires domains:write (fullPipeline preset). Returns project pid and slug.',
+      inputSchema: {
+        domainPid: z.string().describe('Domain pid from air_list_domains'),
+        name: z.string().min(1).describe('Display name for the project'),
+        slug: z.string().min(1).describe('URL-safe slug (unique within the domain)'),
+        description: z.string().optional().describe('Optional project description'),
+      },
+      annotations: writeHint,
     },
-    writeHint,
     async ({ domainPid, name, slug, description }) => {
       try {
         return toolJsonResult(
@@ -146,15 +167,19 @@ export const registerDiscoverTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_search',
-    'Full-text search across orgs, domains, and projects. Requires search:read scope (fullPipeline preset; not included in assessmentRunner).',
     {
-      q: z.string().min(1).describe('Search query'),
-      kind: z.enum(['org', 'domain', 'project']).optional().describe('Restrict to entity kind'),
-      limit: z.number().int().min(1).max(50).optional().describe('Max results (default 20)'),
+      title: MCP_AIR_TOOL_TITLES.air_search,
+      description:
+        'Full-text search across orgs, domains, and projects. Requires search:read scope (fullPipeline preset; not included in assessmentRunner).',
+      inputSchema: {
+        q: z.string().min(1).describe('Search query'),
+        kind: z.enum(['org', 'domain', 'project']).optional().describe('Restrict to entity kind'),
+        limit: z.number().int().min(1).max(50).optional().describe('Max results (default 20)'),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ q, kind, limit }) => {
       try {
         const resolvedLimit = limit ?? MCP_AIR_DEFAULT_LIST_LIMIT

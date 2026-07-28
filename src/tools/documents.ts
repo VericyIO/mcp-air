@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
+import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
 const readOnly = {
   readOnlyHint: true,
@@ -17,14 +18,18 @@ const writeHint = {
 } as const
 
 export const registerDocumentTools = (server: McpServer, api: IntegratorApiClient) => {
-  server.tool(
+  server.registerTool(
     'air_list_documents',
-    'List document sources for a project. Poll until status is connected before starting an assessment. Requires projects:read.',
     {
-      projectPid: z.string().describe('Project pid'),
-      includeArchived: z.boolean().optional().describe('Include archived document sources'),
+      title: MCP_AIR_TOOL_TITLES.air_list_documents,
+      description:
+        'List document sources for a project. Poll until status is connected before starting an assessment. Requires projects:read.',
+      inputSchema: {
+        projectPid: z.string().describe('Project pid'),
+        includeArchived: z.boolean().optional().describe('Include archived document sources'),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ projectPid, includeArchived }) => {
       try {
         return toolJsonResult(await api.listDocuments(projectPid, includeArchived))
@@ -34,14 +39,18 @@ export const registerDocumentTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_get_document_download_url',
-    'Get a presigned download URL for an uploaded document source. Requires projects:read.',
     {
-      projectPid: z.string(),
-      sourcePid: z.string().describe('Document source pid (psrc_*)'),
+      title: MCP_AIR_TOOL_TITLES.air_get_document_download_url,
+      description:
+        'Get a presigned download URL for an uploaded document source. Requires projects:read.',
+      inputSchema: {
+        projectPid: z.string(),
+        sourcePid: z.string().describe('Document source pid (psrc_*)'),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ projectPid, sourcePid }) => {
       try {
         return toolJsonResult(await api.getDocumentDownloadUrl(projectPid, sourcePid))
@@ -51,14 +60,18 @@ export const registerDocumentTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_list_artifacts',
-    'List document-derived artifacts for a project. Use artifact pids in air_start_assessment. Requires projects:read.',
     {
-      projectPid: z.string(),
-      includeArchived: z.boolean().optional(),
+      title: MCP_AIR_TOOL_TITLES.air_list_artifacts,
+      description:
+        'List document-derived artifacts for a project. Use artifact pids in air_start_assessment. Requires projects:read.',
+      inputSchema: {
+        projectPid: z.string(),
+        includeArchived: z.boolean().optional(),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ projectPid, includeArchived }) => {
       try {
         return toolJsonResult(await api.listArtifacts(projectPid, includeArchived))
@@ -68,14 +81,17 @@ export const registerDocumentTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_get_artifact_text',
-    'Get extracted plain text for an artifact. Requires projects:read.',
     {
-      projectPid: z.string(),
-      artifactPid: z.string().describe('Artifact pid (artf_*)'),
+      title: MCP_AIR_TOOL_TITLES.air_get_artifact_text,
+      description: 'Get extracted plain text for an artifact. Requires projects:read.',
+      inputSchema: {
+        projectPid: z.string(),
+        artifactPid: z.string().describe('Artifact pid (artf_*)'),
+      },
+      annotations: readOnly,
     },
-    readOnly,
     async ({ projectPid, artifactPid }) => {
       try {
         return toolJsonResult(await api.getArtifactText(projectPid, artifactPid))
@@ -85,15 +101,19 @@ export const registerDocumentTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_upload_document_init',
-    'Start presigned upload: returns uploadUrl and s3Key. PUT file bytes to uploadUrl, then call air_upload_document_complete. Requires projects:write.',
     {
-      projectPid: z.string(),
-      filename: z.string().describe('Original filename including extension'),
-      contentType: z.string().describe('MIME type, e.g. application/pdf'),
+      title: MCP_AIR_TOOL_TITLES.air_upload_document_init,
+      description:
+        'Start presigned upload: returns uploadUrl and s3Key. PUT file bytes to uploadUrl, then call air_upload_document_complete. Requires projects:write.',
+      inputSchema: {
+        projectPid: z.string(),
+        filename: z.string().describe('Original filename including extension'),
+        contentType: z.string().describe('MIME type, e.g. application/pdf'),
+      },
+      annotations: writeHint,
     },
-    writeHint,
     async ({ projectPid, filename, contentType }) => {
       try {
         return toolJsonResult(await api.initUpload(projectPid, filename, contentType))
@@ -103,16 +123,20 @@ export const registerDocumentTools = (server: McpServer, api: IntegratorApiClien
     },
   )
 
-  server.tool(
+  server.registerTool(
     'air_upload_document_complete',
-    'Finalize presigned upload after PUT to uploadUrl. Dispatches document extraction workflow. Requires projects:write.',
     {
-      projectPid: z.string(),
-      s3Key: z.string().describe('Storage key from air_upload_document_init'),
-      filename: z.string(),
-      contentType: z.string(),
+      title: MCP_AIR_TOOL_TITLES.air_upload_document_complete,
+      description:
+        'Finalize presigned upload after PUT to uploadUrl. Dispatches document extraction workflow. Requires projects:write.',
+      inputSchema: {
+        projectPid: z.string(),
+        s3Key: z.string().describe('Storage key from air_upload_document_init'),
+        filename: z.string(),
+        contentType: z.string(),
+      },
+      annotations: writeHint,
     },
-    writeHint,
     async ({ projectPid, s3Key, filename, contentType }) => {
       try {
         return toolJsonResult(

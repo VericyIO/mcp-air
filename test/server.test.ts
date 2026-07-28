@@ -14,6 +14,7 @@ import {
 } from '../src/capabilities.js'
 import type { IntegratorApiClient } from '../src/client/integrator-api.js'
 import { createAirMcpServer } from '../src/server.js'
+import { MCP_AIR_TOOL_TITLES } from '../src/tool-titles.js'
 
 const connectTestClient = (api?: IntegratorApiClient) => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -45,6 +46,21 @@ const resourceText = (contents: ReadonlyArray<{ text?: string; blob?: string }>,
 }
 
 describe('createAirMcpServer', () => {
+  it('omits local-file tool on remote surface', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const remoteServer = createAirMcpServer(
+      { apiUrl: 'http://localhost:4001', apiKey: 'test-key' },
+      { surface: 'remote' },
+    )
+    const remoteClient = new Client({ name: 'mcp-air-remote-test', version: '1.1.0' })
+    await remoteServer.connect(serverTransport)
+    await remoteClient.connect(clientTransport)
+
+    const tools = await remoteClient.listTools()
+    expect(tools.tools.map((tool) => tool.name)).not.toContain('air_run_assessment_from_file')
+    expect(tools.tools).toHaveLength(24)
+  })
+
   it('registers the expected MCP surface via protocol handshake', async () => {
     const { client } = await connect()
 
@@ -76,6 +92,11 @@ describe('createAirMcpServer', () => {
     for (const name of MCP_AIR_TASK_REQUIRED_TOOL_NAMES) {
       const tool = tools.tools.find((row) => row.name === name)
       expect(tool?.execution?.taskSupport).toBe('required')
+    }
+
+    for (const name of MCP_AIR_EXPECTED_TOOL_NAMES) {
+      const tool = tools.tools.find((row) => row.name === name)
+      expect(tool?.title).toBe(MCP_AIR_TOOL_TITLES[name])
     }
   })
 
