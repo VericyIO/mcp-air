@@ -5,7 +5,14 @@
 
 Connect AI assistants to [AIR](https://air.thalus.ai) (AI Responsibly) for governed risk assessments: discover projects, upload evidence, run assessments, and retrieve structured reports — from **Cursor**, **Claude Code**, **Claude Desktop**, **VS Code**, **Windsurf**, or any [Model Context Protocol](https://modelcontextprotocol.io/) client.
 
-This package runs **locally** as a stdio MCP server. Assessment workloads execute on Thalus cloud infrastructure via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). You provide a domain-scoped API key; no local database, worker, or Docker stack is required.
+This package ships two transports:
+
+| Transport | Who uses it | How |
+| --------- | ----------- | --- |
+| **stdio** (default) | Local IDE agents (Cursor, Claude Code, VS Code, …) | `npx @thalus-ai/mcp-air` + `AIR_API_KEY` |
+| **Streamable HTTP** | Claude Directory / remote MCP clients | Hosted at `https://mcp.air.thalus.ai/mcp` with OAuth |
+
+Local assessment workloads still execute on Thalus cloud via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). You provide a domain-scoped API key for stdio; remote Directory clients authorize through the AIR portal (OAuth). No local database, worker, or Docker stack is required for stdio.
 
 ## Overview
 
@@ -47,7 +54,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.0.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.1.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -64,7 +71,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.0.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.1.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -82,8 +89,22 @@ Ask your agent to run `air_list_domains` and `air_list_projects`. You should see
 **MCP Inspector** (optional):
 
 ```bash
-AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.0.0
+AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.1.0
 ```
+
+## Remote HTTP (operators)
+
+Hosted endpoint: `https://mcp.air.thalus.ai/mcp`.
+
+```bash
+# After build
+AIR_API_URL=https://api.air.thalus.ai \
+REDIS_URL=redis://127.0.0.1:6379 \
+MCP_HTTP_PORT=4104 \
+node dist/build/http.mjs
+```
+
+Deploy notes, Angie, and systemd units live in [`infra/`](./infra/). Claude Directory users connect via OAuth on `air.thalus.ai` — see [Remote MCP OAuth](https://air.thalus.ai/docs/guides/mcp-remote-oauth) once published.
 
 ## Configuration
 
@@ -113,7 +134,7 @@ Full scope reference: [Authentication guide](https://air.thalus.ai/docs/guides/a
 | Client | Config file | Notes |
 | ------ | ----------- | ----- |
 | **Cursor** | `.cursor/mcp.json` or `~/.cursor/mcp.json` | Restart after changes |
-| **Claude Code** | `.mcp.json` or `~/.claude.json` | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.0.0` — [docs](https://code.claude.com/docs/en/mcp) |
+| **Claude Code** | `.mcp.json` or `~/.claude.json` | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.1.0` — [docs](https://code.claude.com/docs/en/mcp) |
 | **Claude Desktop** | See platform paths below | Quit and reopen the app |
 | **VS Code** | `.vscode/mcp.json` or user config via **MCP: Open User Configuration** | Use Copilot **Agent** mode; root key is `servers` |
 | **Windsurf** | `~/.codeium/windsurf/mcp_config.json` | Same `mcpServers` JSON as Cursor |
@@ -193,7 +214,7 @@ pnpm test
 ## Security
 
 - The MCP process runs with your OS user privileges. Tools such as `air_run_assessment_from_file` can read any local path your user can access.
-- Pin the package version in production (`@thalus-ai/mcp-air@1.0.0`) rather than floating `@latest`.
+- Pin the package version in production (`@thalus-ai/mcp-air@1.1.0`) rather than floating `@latest`.
 - Use least-privilege API key scopes. Write tools (`air_start_assessment`, uploads) consume organization credits.
 - Never commit API keys. Use `env` or `envFile` in MCP client configuration.
 

@@ -2,5 +2,5 @@
   "name": "AIR Assessments MCP",
   "description": "Run AIR risk assessments and read project data from Claude and other MCP clients.",
   "remote_url": "https://mcp.air.thalus.ai/mcp",
-  "privacy_policy_url": "https://air.thalus.ai/legal/privacy"
+  "privacy_policy_url": "https://air.thalus.ai/privacy"
 }

@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
+    "redis": "^5.12.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

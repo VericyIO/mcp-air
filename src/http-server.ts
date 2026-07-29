@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { InMemoryTaskStore } from '@modelcontextprotocol/sdk/experimental/tasks'
+import type { TaskStore } from '@modelcontextprotocol/sdk/experimental/tasks/interfaces.js'
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
@@ -8,6 +9,7 @@ import type { Express, Request, Response } from 'express'
 
 import { resolveMcpCredentials, unauthorizedWwwAuthenticateHeader } from './auth.js'
 import type { McpAirHttpRuntimeConfig } from './http-config.js'
+import { RedisTaskStore } from './redis-task-store.js'
 import { createAirMcpServer } from './server.js'
 
 type SessionEntry = {
@@ -27,9 +29,26 @@ const sendUnauthorized = (res: Response) => {
     .json(jsonRpcError(401, 'Unauthorized'))
 }
 
-export const createMcpAirHttpApp = (config: McpAirHttpRuntimeConfig): Express => {
+export type McpAirHttpApp = {
+  readonly app: Express
+  readonly close: () => Promise<void>
+}
+
+export const createMcpAirHttpApp = async (
+  config: McpAirHttpRuntimeConfig,
+): Promise<McpAirHttpApp> => {
   const sessions = new Map<string, SessionEntry>()
   const app = createMcpExpressApp({ host: config.httpHost })
+
+  let redisTaskStore: RedisTaskStore | undefined
+  let sharedTaskStore: TaskStore
+
+  if (config.redisUrl !== undefined) {
+    redisTaskStore = await RedisTaskStore.connect(config.redisUrl)
+    sharedTaskStore = redisTaskStore
+  } else {
+    sharedTaskStore = new InMemoryTaskStore()
+  }
 
   app.get('/health', (_req, res) => {
     res.status(200).send('ok')
@@ -59,10 +78,9 @@ export const createMcpAirHttpApp = (config: McpAirHttpRuntimeConfig): Express =>
           },
         })
 
-        const taskStore = new InMemoryTaskStore()
         const server = createAirMcpServer(
           { apiUrl: config.apiUrl, apiKey: credentials.apiKey },
-          { surface: 'remote', taskStore },
+          { surface: 'remote', taskStore: sharedTaskStore },
         )
 
         transport.onclose = () => {
@@ -89,7 +107,9 @@ export const createMcpAirHttpApp = (config: McpAirHttpRuntimeConfig): Express =>
       await entry.transport.handleRequest(req, res, req.body)
     } catch (error) {
       if (!res.headersSent) {
-        res.status(500).json(jsonRpcError(500, error instanceof Error ? error.message : String(error)))
+        res
+          .status(500)
+          .json(jsonRpcError(500, error instanceof Error ? error.message : String(error)))
       }
     }
   }
@@ -97,11 +117,18 @@ export const createMcpAirHttpApp = (config: McpAirHttpRuntimeConfig): Express =>
   app.post(config.httpPath, handleMcp)
   app.get(config.httpPath, handleMcp)
 
-  return app
+  return {
+    app,
+    close: async () => {
+      if (redisTaskStore !== undefined) {
+        await redisTaskStore.close()
+      }
+    },
+  }
 }
 
-export const startMcpAirHttpServer = (config: McpAirHttpRuntimeConfig) => {
-  const app = createMcpAirHttpApp(config)
+export const startMcpAirHttpServer = async (config: McpAirHttpRuntimeConfig) => {
+  const { app, close } = await createMcpAirHttpApp(config)
 
   return new Promise<void>((resolve, reject) => {
     const server = app.listen(config.httpPort, config.httpHost, (error?: Error) => {
@@ -114,7 +141,9 @@ export const startMcpAirHttpServer = (config: McpAirHttpRuntimeConfig) => {
 
     const shutdown = () => {
       server.close(() => {
-        process.exit(0)
+        void close().finally(() => {
+          process.exit(0)
+        })
       })
     }
 

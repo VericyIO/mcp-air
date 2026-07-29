@@ -1,0 +1,32 @@
+[Unit]
+Description=Thalus AIR MCP HTTP Server
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+WorkingDirectory=/srv/mcp-air
+
+EnvironmentFile=/srv/mcp-air/.env
+
+Environment="NODE_ENV=production"
+Environment="MCP_HTTP_HOST=127.0.0.1"
+Environment="MCP_HTTP_PORT=4104"
+Environment="MCP_HTTP_PATH=/mcp"
+Environment="HOME=/home/ubuntu"
+Environment="PATH=/opt/fnm/node-versions/v24.15.0/installation/bin:/usr/bin:/bin"
+
+ExecStart=/opt/fnm/node-versions/v24.15.0/installation/bin/node /srv/mcp-air/dist/build/http.mjs
+
+Restart=always
+RestartSec=5
+
+SyslogIdentifier=thalus-air-mcp
+
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
