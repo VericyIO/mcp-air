@@ -30,14 +30,22 @@
     "mcp-server-air-http": "./dist/build/http.mjs"
   },
   "exports": {
-    ".": "./dist/build/server.mjs",
-    "./stdio": "./dist/build/index.mjs",
-    "./http": "./dist/build/http.mjs"
+    ".": {
+      "types": "./dist/build/server.d.mts",
+      "import": "./dist/build/server.mjs"
+    },
+    "./stdio": {
+      "types": "./dist/build/index.d.mts",
+      "import": "./dist/build/index.mjs"
+    },
+    "./http": {
+      "types": "./dist/build/http.d.mts",
+      "import": "./dist/build/http.mjs"
+    }
   },
   "files": [
-    "dist/build/index.mjs",
-    "dist/build/http.mjs",
-    "dist/build/server.mjs",
+    "dist/build/*.mjs",
+    "dist/build/*.d.mts",
     "server.json",
     "README.md",
     "LICENSE"

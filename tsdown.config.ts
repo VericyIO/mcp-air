@@ -1,10 +1,10 @@
-import { defineConfig } from 'tsdown'
+import { defineConfig } from "tsdown";
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/http.ts', 'src/server.ts'],
-  tsconfig: 'tsconfig.build.json',
+  entry: ["src/index.ts", "src/http.ts", "src/server.ts"],
+  tsconfig: "tsconfig.build.json",
   sourcemap: false,
-  dts: false,
+  dts: true,
   minify: true,
-  outDir: 'dist/build/',
-})
+  outDir: "dist/build/",
+});

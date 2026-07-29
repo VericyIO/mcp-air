@@ -1,47 +1,65 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from "node:crypto";
 
-import { isTerminal } from '@modelcontextprotocol/sdk/experimental/tasks/interfaces.js'
+import { isTerminal } from "@modelcontextprotocol/sdk/experimental/tasks/interfaces.js";
 import type {
   CreateTaskOptions,
   TaskStore,
-} from '@modelcontextprotocol/sdk/experimental/tasks/interfaces.js'
-import type { Request, RequestId, Result, Task } from '@modelcontextprotocol/sdk/types.js'
-import type { RedisClientType } from 'redis'
-import { createClient } from 'redis'
+} from "@modelcontextprotocol/sdk/experimental/tasks/interfaces.js";
+import type {
+  Request,
+  RequestId,
+  Result,
+  Task,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { RedisClientType } from "redis";
+import { createClient } from "redis";
 
 /** Redis key prefix for MCP task records. */
-export const MCP_AIR_REDIS_TASK_KEY_PREFIX = 'mcp-air:task:' as const
+export const MCP_AIR_REDIS_TASK_KEY_PREFIX = "mcp-air:task:" as const;
 
 /** Redis sorted-set key for task id listing / pagination. */
-export const MCP_AIR_REDIS_TASK_INDEX_KEY = 'mcp-air:tasks' as const
+export const MCP_AIR_REDIS_TASK_INDEX_KEY_PREFIX = "mcp-air:tasks:" as const;
 
 /** Default page size for Redis-backed listTasks. */
-export const MCP_AIR_REDIS_TASK_LIST_PAGE_SIZE = 10 as const
+export const MCP_AIR_REDIS_TASK_LIST_PAGE_SIZE = 10 as const;
 
 /** Minimum TTL seconds when converting ms TTL to Redis EXPIRE (at least 1s). */
-export const MCP_AIR_REDIS_MIN_TTL_SECONDS = 1 as const
+export const MCP_AIR_REDIS_MIN_TTL_SECONDS = 1 as const;
 
 type StoredTask = {
-  readonly task: Task
-  readonly request: Request
-  readonly requestId: RequestId
-  result?: Result
-}
+  readonly task: Task;
+  readonly request: Request;
+  readonly requestId: RequestId;
+  readonly ownerSessionId: string;
+  result?: Result;
+};
 
-const taskKey = (taskId: string) => `${MCP_AIR_REDIS_TASK_KEY_PREFIX}${taskId}`
+const taskKey = (taskId: string) => `${MCP_AIR_REDIS_TASK_KEY_PREFIX}${taskId}`;
+const taskIndexKey = (sessionId: string) =>
+  `${MCP_AIR_REDIS_TASK_INDEX_KEY_PREFIX}${createHash("sha256")
+    .update(sessionId, "utf8")
+    .digest("hex")}`;
+
+const requireSessionId = (sessionId: string | undefined): string => {
+  if (sessionId === undefined || sessionId.length === 0) {
+    throw new Error("A valid MCP session ID is required for task operations");
+  }
+  return sessionId;
+};
 
 const ttlSeconds = (ttlMs: number | null | undefined): number | undefined => {
   if (ttlMs === null || ttlMs === undefined || ttlMs <= 0) {
-    return undefined
+    return undefined;
   }
-  return Math.max(MCP_AIR_REDIS_MIN_TTL_SECONDS, Math.ceil(ttlMs / 1_000))
-}
+  return Math.max(MCP_AIR_REDIS_MIN_TTL_SECONDS, Math.ceil(ttlMs / 1_000));
+};
 
-const generateTaskId = () => randomBytes(16).toString('hex')
+const generateTaskId = () => randomBytes(16).toString("hex");
 
 /**
  * Redis-backed TaskStore for the HTTP MCP host.
- * Survives process restarts and is shared across Streamable HTTP sessions.
+ * Persists task records across restarts. In-process workers are not resumed after a restart.
+ * Every operation is isolated to the Streamable HTTP session that created the task.
  */
 export class RedisTaskStore implements TaskStore {
   private constructor(
@@ -51,100 +69,114 @@ export class RedisTaskStore implements TaskStore {
 
   /** Build a store around an already-connected Redis client (tests / custom wiring). */
   static fromClient(redis: RedisClientType): RedisTaskStore {
-    return new RedisTaskStore(redis, false)
+    return new RedisTaskStore(redis, false);
   }
 
   static async connect(redisUrl: string): Promise<RedisTaskStore> {
-    const redis = createClient({ url: redisUrl }) as RedisClientType
-    redis.on('error', (error) => {
+    const redis = createClient({ url: redisUrl }) as RedisClientType;
+    redis.on("error", (error) => {
       process.stderr.write(
         `[mcp-air redis] ${error instanceof Error ? error.message : String(error)}\n`,
-      )
-    })
-    await redis.connect()
-    return new RedisTaskStore(redis, true)
+      );
+    });
+    await redis.connect();
+    return new RedisTaskStore(redis, true);
   }
 
   async close(): Promise<void> {
     if (this.ownsConnection) {
-      await this.redis.quit()
+      await this.redis.quit();
     }
   }
 
-  private async readStored(taskId: string): Promise<StoredTask | null> {
-    const raw = await this.redis.get(taskKey(taskId))
+  async isReady(): Promise<boolean> {
+    return (await this.redis.ping()) === "PONG";
+  }
+
+  private async readStored(
+    taskId: string,
+    sessionId: string,
+  ): Promise<StoredTask | null> {
+    const raw = await this.redis.get(taskKey(taskId));
     if (raw === null) {
-      return null
+      return null;
     }
-    return JSON.parse(raw) as StoredTask
+    const stored = JSON.parse(raw) as StoredTask;
+    return stored.ownerSessionId === sessionId ? stored : null;
   }
 
-  private async writeStored(stored: StoredTask, expireSeconds?: number): Promise<void> {
-    const key = taskKey(stored.task.taskId)
-    const payload = JSON.stringify(stored)
+  private async writeStored(
+    stored: StoredTask,
+    expireSeconds?: number,
+  ): Promise<void> {
+    const key = taskKey(stored.task.taskId);
+    const payload = JSON.stringify(stored);
     if (expireSeconds !== undefined) {
-      await this.redis.set(key, payload, { EX: expireSeconds })
+      await this.redis.set(key, payload, { EX: expireSeconds });
     } else {
-      await this.redis.set(key, payload)
+      await this.redis.set(key, payload);
     }
   }
 
-  private async refreshIndex(taskId: string, score: number, expireSeconds?: number): Promise<void> {
-    await this.redis.zAdd(MCP_AIR_REDIS_TASK_INDEX_KEY, { score, value: taskId })
-    if (expireSeconds !== undefined) {
-      await this.redis.expire(MCP_AIR_REDIS_TASK_INDEX_KEY, expireSeconds)
-    }
+  private async refreshIndex(
+    taskId: string,
+    sessionId: string,
+    score: number,
+  ): Promise<void> {
+    await this.redis.zAdd(taskIndexKey(sessionId), { score, value: taskId });
   }
 
   async createTask(
     taskParams: CreateTaskOptions,
     requestId: RequestId,
     request: Request,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<Task> {
-    const taskId = generateTaskId()
-    const existing = await this.readStored(taskId)
+    const ownerSessionId = requireSessionId(sessionId);
+    const taskId = generateTaskId();
+    const existing = await this.readStored(taskId, ownerSessionId);
     if (existing !== null) {
-      throw new Error(`Task with ID ${taskId} already exists`)
+      throw new Error(`Task with ID ${taskId} already exists`);
     }
 
-    const actualTtl = taskParams.ttl ?? null
-    const createdAt = new Date().toISOString()
+    const actualTtl = taskParams.ttl ?? null;
+    const createdAt = new Date().toISOString();
     const task: Task = {
       taskId,
-      status: 'working',
+      status: "working",
       ttl: actualTtl,
       createdAt,
       lastUpdatedAt: createdAt,
       pollInterval: taskParams.pollInterval ?? 1_000,
-    }
+    };
 
-    const stored: StoredTask = { task, request, requestId }
-    const expireSeconds = ttlSeconds(actualTtl)
-    await this.writeStored(stored, expireSeconds)
-    await this.refreshIndex(taskId, Date.parse(createdAt), expireSeconds)
-    return task
+    const stored: StoredTask = { task, request, requestId, ownerSessionId };
+    const expireSeconds = ttlSeconds(actualTtl);
+    await this.writeStored(stored, expireSeconds);
+    await this.refreshIndex(taskId, ownerSessionId, Date.parse(createdAt));
+    return task;
   }
 
-  async getTask(taskId: string, _sessionId?: string): Promise<Task | null> {
-    const stored = await this.readStored(taskId)
-    return stored === null ? null : { ...stored.task }
+  async getTask(taskId: string, sessionId?: string): Promise<Task | null> {
+    const stored = await this.readStored(taskId, requireSessionId(sessionId));
+    return stored === null ? null : { ...stored.task };
   }
 
   async storeTaskResult(
     taskId: string,
-    status: 'completed' | 'failed',
+    status: "completed" | "failed",
     result: Result,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<void> {
-    const stored = await this.readStored(taskId)
+    const ownerSessionId = requireSessionId(sessionId);
+    const stored = await this.readStored(taskId, ownerSessionId);
     if (stored === null) {
-      throw new Error(`Task with ID ${taskId} not found`)
+      throw new Error(`Task with ID ${taskId} not found`);
     }
     if (isTerminal(stored.task.status)) {
       throw new Error(
         `Cannot store result for task ${taskId} in terminal status '${stored.task.status}'. Task results can only be stored once.`,
-      )
+      );
     }
 
     const updated: StoredTask = {
@@ -155,37 +187,42 @@ export class RedisTaskStore implements TaskStore {
         status,
         lastUpdatedAt: new Date().toISOString(),
       },
-    }
-    const expireSeconds = ttlSeconds(updated.task.ttl)
-    await this.writeStored(updated, expireSeconds)
-    await this.refreshIndex(taskId, Date.parse(updated.task.createdAt), expireSeconds)
+    };
+    const expireSeconds = ttlSeconds(updated.task.ttl);
+    await this.writeStored(updated, expireSeconds);
+    await this.refreshIndex(
+      taskId,
+      ownerSessionId,
+      Date.parse(updated.task.createdAt),
+    );
   }
 
-  async getTaskResult(taskId: string, _sessionId?: string): Promise<Result> {
-    const stored = await this.readStored(taskId)
+  async getTaskResult(taskId: string, sessionId?: string): Promise<Result> {
+    const stored = await this.readStored(taskId, requireSessionId(sessionId));
     if (stored === null) {
-      throw new Error(`Task with ID ${taskId} not found`)
+      throw new Error(`Task with ID ${taskId} not found`);
     }
     if (stored.result === undefined) {
-      throw new Error(`Task ${taskId} has no result stored`)
+      throw new Error(`Task ${taskId} has no result stored`);
     }
-    return stored.result
+    return stored.result;
   }
 
   async updateTaskStatus(
     taskId: string,
-    status: Task['status'],
+    status: Task["status"],
     statusMessage?: string,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<void> {
-    const stored = await this.readStored(taskId)
+    const ownerSessionId = requireSessionId(sessionId);
+    const stored = await this.readStored(taskId, ownerSessionId);
     if (stored === null) {
-      throw new Error(`Task with ID ${taskId} not found`)
+      throw new Error(`Task with ID ${taskId} not found`);
     }
     if (isTerminal(stored.task.status)) {
       throw new Error(
         `Cannot update task ${taskId} from terminal status '${stored.task.status}' to '${status}'. Terminal states (completed, failed, cancelled) cannot transition to other states.`,
-      )
+      );
     }
 
     const updatedTask: Task = {
@@ -193,43 +230,52 @@ export class RedisTaskStore implements TaskStore {
       status,
       lastUpdatedAt: new Date().toISOString(),
       ...(statusMessage !== undefined ? { statusMessage } : {}),
-    }
-    const updated: StoredTask = { ...stored, task: updatedTask }
-    const expireSeconds = ttlSeconds(updated.task.ttl)
-    await this.writeStored(updated, expireSeconds)
-    await this.refreshIndex(taskId, Date.parse(updated.task.createdAt), expireSeconds)
+    };
+    const updated: StoredTask = { ...stored, task: updatedTask };
+    const expireSeconds = ttlSeconds(updated.task.ttl);
+    await this.writeStored(updated, expireSeconds);
+    await this.refreshIndex(
+      taskId,
+      ownerSessionId,
+      Date.parse(updated.task.createdAt),
+    );
   }
 
   async listTasks(
     cursor?: string,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<{ tasks: Task[]; nextCursor?: string }> {
-    const allTaskIds = await this.redis.zRange(MCP_AIR_REDIS_TASK_INDEX_KEY, 0, -1)
-    let startIndex = 0
+    const ownerSessionId = requireSessionId(sessionId);
+    const indexKey = taskIndexKey(ownerSessionId);
+    const allTaskIds = await this.redis.zRange(indexKey, 0, -1);
+    let startIndex = 0;
     if (cursor !== undefined) {
-      const cursorIndex = allTaskIds.indexOf(cursor)
+      const cursorIndex = allTaskIds.indexOf(cursor);
       if (cursorIndex < 0) {
-        throw new Error(`Invalid cursor: ${cursor}`)
+        throw new Error(`Invalid cursor: ${cursor}`);
       }
-      startIndex = cursorIndex + 1
+      startIndex = cursorIndex + 1;
     }
 
-    const pageTaskIds = allTaskIds.slice(startIndex, startIndex + MCP_AIR_REDIS_TASK_LIST_PAGE_SIZE)
-    const tasks: Task[] = []
+    const pageTaskIds = allTaskIds.slice(
+      startIndex,
+      startIndex + MCP_AIR_REDIS_TASK_LIST_PAGE_SIZE,
+    );
+    const tasks: Task[] = [];
     for (const taskId of pageTaskIds) {
-      const stored = await this.readStored(taskId)
+      const stored = await this.readStored(taskId, ownerSessionId);
       if (stored !== null) {
-        tasks.push({ ...stored.task })
+        tasks.push({ ...stored.task });
       } else {
-        await this.redis.zRem(MCP_AIR_REDIS_TASK_INDEX_KEY, taskId)
+        await this.redis.zRem(indexKey, taskId);
       }
     }
 
     const nextCursor =
       startIndex + MCP_AIR_REDIS_TASK_LIST_PAGE_SIZE < allTaskIds.length
         ? pageTaskIds[pageTaskIds.length - 1]
-        : undefined
+        : undefined;
 
-    return nextCursor === undefined ? { tasks } : { tasks, nextCursor }
+    return nextCursor === undefined ? { tasks } : { tasks, nextCursor };
   }
 }
