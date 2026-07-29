@@ -61,6 +61,12 @@ export const createMcpAirHttpApp = async (
 
   if (config.redisUrl !== undefined) {
     redisTaskStore = await RedisTaskStore.connect(config.redisUrl);
+    const orphaned = await redisTaskStore.failOrphanedWorkingTasks();
+    if (orphaned > 0) {
+      process.stderr.write(
+        `[mcp-air] marked ${orphaned} orphaned Redis task(s) failed after restart\n`,
+      );
+    }
     sharedTaskStore = redisTaskStore;
   }
 

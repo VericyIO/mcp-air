@@ -26,6 +26,10 @@ export const MCP_AIR_REDIS_TASK_LIST_PAGE_SIZE = 10 as const;
 /** Minimum TTL seconds when converting ms TTL to Redis EXPIRE (at least 1s). */
 export const MCP_AIR_REDIS_MIN_TTL_SECONDS = 1 as const;
 
+/** Status message applied when failing orphaned in-flight tasks after restart. */
+export const MCP_AIR_ORPHANED_TASK_STATUS_MESSAGE =
+  "Task worker lost after MCP host restart" as const;
+
 type StoredTask = {
   readonly task: Task;
   readonly request: Request;
@@ -33,6 +37,64 @@ type StoredTask = {
   readonly ownerSessionId: string;
   result?: Result;
 };
+
+type MutateOutcome =
+  | { readonly ok: true; readonly skipped?: boolean }
+  | { readonly ok: false; readonly err: "not_found" | "terminal" | "forbidden" };
+
+const MUTATE_TASK_LUA = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return cjson.encode({ ok = false, err = 'not_found' })
+end
+
+local stored = cjson.decode(raw)
+local mode = ARGV[1]
+local ownerSessionId = ARGV[2]
+local nowIso = ARGV[3]
+local expireSeconds = ARGV[4]
+local payload = cjson.decode(ARGV[5])
+
+if mode ~= 'fail_orphan' and stored.ownerSessionId ~= ownerSessionId then
+  return cjson.encode({ ok = false, err = 'forbidden' })
+end
+
+local status = stored.task.status
+if status == 'completed' or status == 'failed' or status == 'cancelled' then
+  if mode == 'fail_orphan' then
+    return cjson.encode({ ok = true, skipped = true })
+  end
+  return cjson.encode({ ok = false, err = 'terminal' })
+end
+
+if mode == 'status' then
+  stored.task.status = payload.status
+  stored.task.lastUpdatedAt = nowIso
+  if payload.statusMessage ~= nil then
+    stored.task.statusMessage = payload.statusMessage
+  end
+elseif mode == 'result' then
+  stored.result = payload.result
+  stored.task.status = payload.status
+  stored.task.lastUpdatedAt = nowIso
+elseif mode == 'fail_orphan' then
+  stored.result = payload.result
+  stored.task.status = 'failed'
+  stored.task.statusMessage = payload.statusMessage
+  stored.task.lastUpdatedAt = nowIso
+else
+  return cjson.encode({ ok = false, err = 'not_found' })
+end
+
+local encoded = cjson.encode(stored)
+if expireSeconds ~= '' then
+  redis.call('SET', KEYS[1], encoded, 'EX', tonumber(expireSeconds))
+else
+  redis.call('SET', KEYS[1], encoded)
+end
+
+return cjson.encode({ ok = true })
+`;
 
 const taskKey = (taskId: string) => `${MCP_AIR_REDIS_TASK_KEY_PREFIX}${taskId}`;
 const taskIndexKey = (sessionId: string) =>
@@ -56,9 +118,18 @@ const ttlSeconds = (ttlMs: number | null | undefined): number | undefined => {
 
 const generateTaskId = () => randomBytes(16).toString("hex");
 
+const parseMutateOutcome = (raw: unknown): MutateOutcome => {
+  const value =
+    typeof raw === "string"
+      ? (JSON.parse(raw) as MutateOutcome)
+      : (raw as MutateOutcome);
+  return value;
+};
+
 /**
  * Redis-backed TaskStore for the HTTP MCP host.
- * Persists task records across restarts. In-process workers are not resumed after a restart.
+ * Persists task records across restarts. In-process workers are not resumed after a restart;
+ * orphaned non-terminal tasks are marked failed on startup.
  * Every operation is isolated to the Streamable HTTP session that created the task.
  */
 export class RedisTaskStore implements TaskStore {
@@ -126,6 +197,170 @@ export class RedisTaskStore implements TaskStore {
     await this.redis.zAdd(taskIndexKey(sessionId), { score, value: taskId });
   }
 
+  private mutateInMemory(
+    raw: string,
+    mode: "status" | "result" | "fail_orphan",
+    ownerSessionId: string,
+    nowIso: string,
+    payload: Record<string, unknown>,
+  ): { readonly outcome: MutateOutcome; readonly encoded?: string } {
+    const parsed = JSON.parse(raw) as StoredTask;
+    if (mode !== "fail_orphan" && parsed.ownerSessionId !== ownerSessionId) {
+      return { outcome: { ok: false, err: "forbidden" } };
+    }
+    if (isTerminal(parsed.task.status)) {
+      if (mode === "fail_orphan") {
+        return { outcome: { ok: true, skipped: true } };
+      }
+      return { outcome: { ok: false, err: "terminal" } };
+    }
+
+    let next: StoredTask;
+    if (mode === "status") {
+      next = {
+        ...parsed,
+        task: {
+          ...parsed.task,
+          status: payload.status as Task["status"],
+          lastUpdatedAt: nowIso,
+          ...(typeof payload.statusMessage === "string"
+            ? { statusMessage: payload.statusMessage }
+            : {}),
+        },
+      };
+    } else if (mode === "result") {
+      next = {
+        ...parsed,
+        result: payload.result as Result,
+        task: {
+          ...parsed.task,
+          status: payload.status as "completed" | "failed",
+          lastUpdatedAt: nowIso,
+        },
+      };
+    } else {
+      next = {
+        ...parsed,
+        result: payload.result as Result,
+        task: {
+          ...parsed.task,
+          status: "failed",
+          statusMessage:
+            typeof payload.statusMessage === "string"
+              ? payload.statusMessage
+              : MCP_AIR_ORPHANED_TASK_STATUS_MESSAGE,
+          lastUpdatedAt: nowIso,
+        },
+      };
+    }
+
+    return { outcome: { ok: true }, encoded: JSON.stringify(next) };
+  }
+
+  private async mutateTask(
+    taskId: string,
+    mode: "status" | "result" | "fail_orphan",
+    ownerSessionId: string,
+    payload: Record<string, unknown>,
+    expireSeconds?: number,
+  ): Promise<MutateOutcome> {
+    const key = taskKey(taskId);
+    const nowIso = new Date().toISOString();
+    const args = [
+      mode,
+      ownerSessionId,
+      nowIso,
+      expireSeconds === undefined ? "" : String(expireSeconds),
+      JSON.stringify(payload),
+    ];
+
+    if (typeof this.redis.eval === "function") {
+      try {
+        const raw = await this.redis.eval(MUTATE_TASK_LUA, {
+          keys: [key],
+          arguments: args,
+        });
+        return parseMutateOutcome(raw);
+      } catch {
+        // Fall through to in-memory CAS for test fakes without Lua.
+      }
+    }
+
+    const existing = await this.redis.get(key);
+    if (existing === null) {
+      return { ok: false, err: "not_found" };
+    }
+    const mutated = this.mutateInMemory(
+      existing,
+      mode,
+      ownerSessionId,
+      nowIso,
+      payload,
+    );
+    if (!mutated.outcome.ok || mutated.encoded === undefined) {
+      return mutated.outcome;
+    }
+    if (expireSeconds !== undefined) {
+      await this.redis.set(key, mutated.encoded, { EX: expireSeconds });
+    } else {
+      await this.redis.set(key, mutated.encoded);
+    }
+    return mutated.outcome;
+  }
+
+  /**
+   * Mark non-terminal tasks left behind by a previous process as failed.
+   * Call once after connect, before accepting MCP traffic.
+   */
+  async failOrphanedWorkingTasks(
+    statusMessage = MCP_AIR_ORPHANED_TASK_STATUS_MESSAGE,
+  ): Promise<number> {
+    let cursor: string | number = "0";
+    let failed = 0;
+    do {
+      const scanResult: { cursor: string | number; keys: string[] } =
+        typeof this.redis.scan === "function"
+          ? await this.redis.scan(String(cursor), {
+              MATCH: `${MCP_AIR_REDIS_TASK_KEY_PREFIX}*`,
+              COUNT: 100,
+            })
+          : { cursor: "0", keys: [] };
+      cursor = scanResult.cursor;
+      for (const key of scanResult.keys) {
+        const raw = await this.redis.get(key);
+        if (raw === null) {
+          continue;
+        }
+        const stored = JSON.parse(raw) as StoredTask;
+        if (isTerminal(stored.task.status)) {
+          continue;
+        }
+        const outcome = await this.mutateTask(
+          stored.task.taskId,
+          "fail_orphan",
+          stored.ownerSessionId,
+          {
+            statusMessage,
+            result: {
+              content: [{ type: "text", text: statusMessage }],
+              isError: true,
+            },
+          },
+          ttlSeconds(stored.task.ttl),
+        );
+        if (outcome.ok && outcome.skipped !== true) {
+          failed += 1;
+          await this.refreshIndex(
+            stored.task.taskId,
+            stored.ownerSessionId,
+            Date.parse(stored.task.createdAt),
+          );
+        }
+      }
+    } while (Number(cursor) !== 0);
+    return failed;
+  }
+
   async createTask(
     taskParams: CreateTaskOptions,
     requestId: RequestId,
@@ -173,27 +408,26 @@ export class RedisTaskStore implements TaskStore {
     if (stored === null) {
       throw new Error(`Task with ID ${taskId} not found`);
     }
-    if (isTerminal(stored.task.status)) {
-      throw new Error(
-        `Cannot store result for task ${taskId} in terminal status '${stored.task.status}'. Task results can only be stored once.`,
-      );
+    const expireSeconds = ttlSeconds(stored.task.ttl);
+    const outcome = await this.mutateTask(
+      taskId,
+      "result",
+      ownerSessionId,
+      { status, result },
+      expireSeconds,
+    );
+    if (!outcome.ok) {
+      if (outcome.err === "terminal") {
+        throw new Error(
+          `Cannot store result for task ${taskId} in terminal status. Task results can only be stored once.`,
+        );
+      }
+      throw new Error(`Task with ID ${taskId} not found`);
     }
-
-    const updated: StoredTask = {
-      ...stored,
-      result,
-      task: {
-        ...stored.task,
-        status,
-        lastUpdatedAt: new Date().toISOString(),
-      },
-    };
-    const expireSeconds = ttlSeconds(updated.task.ttl);
-    await this.writeStored(updated, expireSeconds);
     await this.refreshIndex(
       taskId,
       ownerSessionId,
-      Date.parse(updated.task.createdAt),
+      Date.parse(stored.task.createdAt),
     );
   }
 
@@ -219,25 +453,29 @@ export class RedisTaskStore implements TaskStore {
     if (stored === null) {
       throw new Error(`Task with ID ${taskId} not found`);
     }
-    if (isTerminal(stored.task.status)) {
-      throw new Error(
-        `Cannot update task ${taskId} from terminal status '${stored.task.status}' to '${status}'. Terminal states (completed, failed, cancelled) cannot transition to other states.`,
-      );
+    const expireSeconds = ttlSeconds(stored.task.ttl);
+    const outcome = await this.mutateTask(
+      taskId,
+      "status",
+      ownerSessionId,
+      {
+        status,
+        ...(statusMessage !== undefined ? { statusMessage } : {}),
+      },
+      expireSeconds,
+    );
+    if (!outcome.ok) {
+      if (outcome.err === "terminal") {
+        throw new Error(
+          `Cannot update task ${taskId} from terminal status to '${status}'. Terminal states (completed, failed, cancelled) cannot transition to other states.`,
+        );
+      }
+      throw new Error(`Task with ID ${taskId} not found`);
     }
-
-    const updatedTask: Task = {
-      ...stored.task,
-      status,
-      lastUpdatedAt: new Date().toISOString(),
-      ...(statusMessage !== undefined ? { statusMessage } : {}),
-    };
-    const updated: StoredTask = { ...stored, task: updatedTask };
-    const expireSeconds = ttlSeconds(updated.task.ttl);
-    await this.writeStored(updated, expireSeconds);
     await this.refreshIndex(
       taskId,
       ownerSessionId,
-      Date.parse(updated.task.createdAt),
+      Date.parse(stored.task.createdAt),
     );
   }
 
