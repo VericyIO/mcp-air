@@ -58,7 +58,7 @@ describe('createAirMcpServer', () => {
 
     const tools = await remoteClient.listTools()
     expect(tools.tools.map((tool) => tool.name)).not.toContain('air_run_assessment_from_file')
-    expect(tools.tools).toHaveLength(24)
+    expect(tools.tools).toHaveLength(27)
   })
 
   it('registers the expected MCP surface via protocol handshake', async () => {

@@ -185,6 +185,27 @@ export class IntegratorApiClient {
     )
   }
 
+  listOpenFacts(assessmentPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/assessments/${encodeURIComponent(assessmentPid)}/open-facts`,
+    )
+  }
+
+  submitFactAnswers(
+    assessmentPid: string,
+    answers: ReadonlyArray<{
+      factPath: string
+      value: boolean | ReadonlyArray<string> | null
+      justification?: string | undefined
+      evidenceChunkIds?: ReadonlyArray<string> | undefined
+    }>,
+  ) {
+    return this.request<Record<string, unknown>>(
+      `/assessments/${encodeURIComponent(assessmentPid)}/fact-answers`,
+      { method: 'POST', body: { answers } },
+    )
+  }
+
   listAssessmentStages(assessmentPid: string) {
     return this.request<ReadonlyArray<Record<string, unknown>>>(
       `/assessments/${encodeURIComponent(assessmentPid)}/stages`,

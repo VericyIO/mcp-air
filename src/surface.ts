@@ -1,7 +1,7 @@
 /** MCP tool surface — local stdio vs remote Streamable HTTP. */
 export type McpAirSurface = 'local' | 'remote'
 
-export const MCP_AIR_REMOTE_TOOL_COUNT = 24 as const
+export const MCP_AIR_REMOTE_TOOL_COUNT = 27 as const
 
 export const MCP_AIR_REMOTE_TOOL_NAMES = [
   'air_list_domains',
@@ -19,6 +19,9 @@ export const MCP_AIR_REMOTE_TOOL_NAMES = [
   'air_list_assessments',
   'air_get_assessment',
   'air_get_assessment_report',
+  'air_get_assessment_summary',
+  'air_list_open_facts',
+  'air_submit_fact_answers',
   'air_get_assessment_stages',
   'air_get_assessment_input_artifacts',
   'air_create_assessment_draft',
