@@ -165,7 +165,7 @@ Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/
 | **Portfolio**   | `air_get_domain_portfolio`                                                                                                                                                                                                  |
 | **Composites**  | `air_wait_for_document_extraction`, `air_wait_for_assessment`, `air_run_assessment_from_file`, `air_run_full_assessment_pipeline`                                                                                           |
 
-Composite wait tools use the [MCP Tasks extension](https://modelcontextprotocol.io/extensions/tasks/overview) and return a task handle immediately instead of blocking for up to 30 minutes. Clients without Tasks support should poll with `air_get_assessment` or `air_list_documents` manually.
+`air_wait_for_*` tools block with exponential backoff until the resource is ready or `timeoutMs` elapses (capped at the configured defaults). Pipeline tools (`air_run_assessment_from_file`, `air_run_full_assessment_pipeline`) use the [MCP Tasks extension](https://modelcontextprotocol.io/extensions/tasks/overview) and return a task handle immediately — those require a Tasks-capable client.
 
 ### Resources (3 templates)
 

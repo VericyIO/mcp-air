@@ -51,10 +51,11 @@ export const MCP_AIR_EXPECTED_RESOURCE_TEMPLATE_URI_PATTERNS = [
   'air://projects/{projectPid}/assessments',
 ] as const satisfies ReadonlyArray<string>
 
-/** Composite tools that require MCP Tasks (execution.taskSupport: required). */
+/**
+ * Composite tools that require MCP Tasks (execution.taskSupport: required).
+ * Wait tools are plain blocking tools so clients without Tasks still work.
+ */
 export const MCP_AIR_TASK_REQUIRED_TOOL_NAMES = [
-  'air_wait_for_document_extraction',
-  'air_wait_for_assessment',
   'air_run_assessment_from_file',
   'air_run_full_assessment_pipeline',
 ] as const satisfies ReadonlyArray<string>

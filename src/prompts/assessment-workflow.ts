@@ -20,9 +20,9 @@ export const registerAssessmentPrompts = (server: McpServer) => {
                 ? `Start from projectPid: ${projectPid}.`
                 : 'Begin with air_list_domains and air_list_projects to pick a target project.',
               'Steps:',
-              '1. air_list_artifacts (or air_upload_document_init → PUT file → air_upload_document_complete → air_wait_for_document_extraction as an MCP Task)',
+              '1. air_list_artifacts (or air_upload_document_init → PUT file → air_upload_document_complete → air_wait_for_document_extraction)',
               '2. air_start_assessment with up to five artifactPids',
-              '3. air_wait_for_assessment (MCP Task) until completed',
+              '3. air_wait_for_assessment until completed (pass a modest timeoutMs if needed)',
               '4. air_get_assessment_report and summarize key risks and EU AI Act tier',
             ].join('\n'),
           },
