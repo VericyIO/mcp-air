@@ -2,7 +2,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
-import { toolErrorResult, toolJsonResult } from '../errors.js'
+import { MCP_AIR_MAX_TOOL_RESULT_CHARS } from '../config.js'
+import { toolErrorResult, toolJsonResult, toolJsonResultWithinBudget } from '../errors.js'
 import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
 const readOnly = {
@@ -49,6 +50,39 @@ const pickReportSection = (
     section,
     [section]: value ?? null,
   }
+}
+
+/** Room left for the JSON envelope around a paged section. */
+const SECTION_PAGE_ENVELOPE_CHARS = 2_000
+
+/**
+ * Table of contents for a report: what each section holds and how big it serializes to.
+ * Lets a caller that hit the size ceiling pick sections deliberately instead of guessing.
+ */
+const describeReportSections = (report: Record<string, unknown>) =>
+  REPORT_SECTIONS.map((section) => {
+    const value = report[section]
+    return {
+      section,
+      present: value !== undefined && value !== null,
+      ...(Array.isArray(value) ? { itemCount: value.length } : {}),
+      chars: value === undefined ? 0 : JSON.stringify(value).length,
+    }
+  })
+
+/** Take as many leading items as fit the budget, always at least one. */
+const fitItems = (items: ReadonlyArray<unknown>, budgetChars: number) => {
+  const kept: unknown[] = []
+  let used = 0
+  for (const item of items) {
+    const cost = JSON.stringify(item).length + 2
+    if (used + cost > budgetChars && kept.length > 0) {
+      break
+    }
+    kept.push(item)
+    used += cost
+  }
+  return kept
 }
 
 const buildAssessmentSummary = (report: Record<string, unknown>) => ({
@@ -114,23 +148,83 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_report,
       description:
-        'Fetch the structured risk assessment report JSON for a completed run. Pass section to return one report slice (overview, riskRegister, watchlist, euAiActTier, evidenceAppendix, …) and keep payloads context-safe. Requires assessments:read.',
+        'Fetch the structured risk assessment report for a completed run. Omit section to get the whole report; if it is too large for one response you get a section index instead — each section with its size and item count — so you can pull the parts you need. Pass section for one slice, and offset/limit to page through a list section such as riskRegister or evidenceAppendix. Requires assessments:read.',
       inputSchema: {
         assessmentPid: z.string(),
         section: z
           .enum(REPORT_SECTIONS)
           .optional()
-          .describe('Optional report section to return instead of the full ~200KB report'),
+          .describe('Report section to return instead of the whole report'),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('First item to return when section is a list (default 0)'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Max items to return when section is a list'),
       },
       annotations: readOnly,
     },
-    async ({ assessmentPid, section }) => {
+    async ({ assessmentPid, section, offset, limit }) => {
       try {
         const report = await api.getAssessmentReport(assessmentPid)
-        if (section !== undefined) {
-          return toolJsonResult(pickReportSection(report, section))
+
+        if (section === undefined) {
+          const whole = JSON.stringify(report, null, 2)
+          if (whole.length <= MCP_AIR_MAX_TOOL_RESULT_CHARS) {
+            return { content: [{ type: 'text' as const, text: whole }] }
+          }
+          return toolJsonResultWithinBudget(
+            {
+              assessmentPid,
+              projectName: report.projectName,
+              complete: false,
+              reason: `The whole report is ${whole.length} characters, over the ${MCP_AIR_MAX_TOOL_RESULT_CHARS} character limit for one tool result.`,
+              nextStep:
+                'Call air_get_assessment_report again with section set to the part you need. List sections also accept offset and limit.',
+              summary: buildAssessmentSummary(report),
+              sections: describeReportSections(report),
+            },
+            MCP_AIR_MAX_TOOL_RESULT_CHARS,
+            () =>
+              `Report ${assessmentPid} is too large to index in one response. Call air_get_assessment_summary for triage, then air_get_assessment_report with one of these sections: ${REPORT_SECTIONS.join(', ')}.`,
+          )
         }
-        return toolJsonResult(report)
+
+        const value = report[section]
+
+        if (Array.isArray(value)) {
+          const start = offset ?? 0
+          const requested = limit === undefined ? value.slice(start) : value.slice(start, start + limit)
+          const items = fitItems(
+            requested,
+            MCP_AIR_MAX_TOOL_RESULT_CHARS - SECTION_PAGE_ENVELOPE_CHARS,
+          )
+          const nextOffset = start + items.length
+          return toolJsonResult({
+            assessmentPid,
+            projectName: report.projectName,
+            section,
+            totalItems: value.length,
+            offset: start,
+            returned: items.length,
+            complete: nextOffset >= value.length,
+            ...(nextOffset < value.length ? { nextOffset } : {}),
+            [section]: items,
+          })
+        }
+
+        return toolJsonResultWithinBudget(
+          pickReportSection(report, section),
+          MCP_AIR_MAX_TOOL_RESULT_CHARS,
+          (actualChars) =>
+            `Section "${section}" of report ${assessmentPid} is ${actualChars} characters, over the ${MCP_AIR_MAX_TOOL_RESULT_CHARS} character limit for one tool result. It is not a list, so it cannot be paged — read the whole report from the air://assessments/${assessmentPid}/report resource instead.`,
+        )
       } catch (error) {
         return toolErrorResult(error, 'air_get_assessment_report')
       }

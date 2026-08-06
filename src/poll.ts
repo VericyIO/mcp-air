@@ -28,25 +28,37 @@ export const isAssessmentCompleted = (status: string): boolean => status === 'co
 export const isAssessmentReportReady = (assessment: Record<string, unknown>): boolean =>
   isAssessmentCompleted(String(assessment.status)) || assessment.reportAvailable === true
 
+/**
+ * Outcome of a bounded wait. Running out of budget is a normal outcome, not an error:
+ * the caller reports the last observed state so the agent can wait again.
+ */
+export type PollOutcome<T> =
+  | { readonly ready: true; readonly value: T }
+  | { readonly ready: false; readonly last: T | undefined }
+
 export const pollUntilDocumentTerminal = async (
   fetchStatus: () => Promise<{ status: string; document: Record<string, unknown> } | undefined>,
   deadlineMs: number,
   initialIntervalMs: number = MCP_AIR_DOCUMENT_EXTRACTION_POLL_INTERVAL_MS,
   maxIntervalMs: number = MCP_AIR_DOCUMENT_EXTRACTION_POLL_MAX_INTERVAL_MS,
-): Promise<{ status: string; document: Record<string, unknown> }> => {
+): Promise<PollOutcome<{ status: string; document: Record<string, unknown> }>> => {
   const deadline = Date.now() + deadlineMs
   let intervalMs = initialIntervalMs
+  let last: { status: string; document: Record<string, unknown> } | undefined
 
   while (Date.now() < deadline) {
     const result = await fetchStatus()
-    if (result !== undefined && isDocumentTerminal(result.status)) {
-      return result
+    if (result !== undefined) {
+      last = result
+      if (isDocumentTerminal(result.status)) {
+        return { ready: true, value: result }
+      }
     }
     await sleep(intervalMs)
     intervalMs = nextPollIntervalMs(intervalMs, maxIntervalMs)
   }
 
-  throw new Error('Timed out waiting for document extraction')
+  return { ready: false, last }
 }
 
 export const pollUntilAssessmentReady = async (
@@ -54,12 +66,14 @@ export const pollUntilAssessmentReady = async (
   deadlineMs: number,
   initialIntervalMs: number = MCP_AIR_ASSESSMENT_POLL_INTERVAL_MS,
   maxIntervalMs: number = MCP_AIR_ASSESSMENT_POLL_MAX_INTERVAL_MS,
-): Promise<Record<string, unknown>> => {
+): Promise<PollOutcome<Record<string, unknown>>> => {
   const deadline = Date.now() + deadlineMs
   let intervalMs = initialIntervalMs
+  let last: Record<string, unknown> | undefined
 
   while (Date.now() < deadline) {
     const assessment = await fetchAssessment()
+    last = assessment
     const status = String(assessment.status)
     if (isAssessmentDraft(status)) {
       const assessmentPid = typeof assessment.pid === 'string' ? assessment.pid : 'unknown'
@@ -68,11 +82,11 @@ export const pollUntilAssessmentReady = async (
       )
     }
     if (isAssessmentFailed(status) || isAssessmentReportReady(assessment)) {
-      return assessment
+      return { ready: true, value: assessment }
     }
     await sleep(intervalMs)
     intervalMs = nextPollIntervalMs(intervalMs, maxIntervalMs)
   }
 
-  throw new Error('Timed out waiting for assessment')
+  return { ready: false, last }
 }

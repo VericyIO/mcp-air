@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
-import { MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL } from "./http-config.js";
+import {
+  MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL,
+  MCP_AIR_OAUTH_REQUIRED_SCOPE,
+} from "./http-config.js";
 import type { McpAirHttpRuntimeConfig } from "./http-config.js";
 
 const DOMAIN_API_KEY_PATTERN =
@@ -157,9 +160,13 @@ export const resolveMcpCredentials = async (
   return introspectOAuthToken(config, token);
 };
 
+/**
+ * Advertise the exact scope the MCP surface needs. Without it, clients request every
+ * scope the protected-resource metadata lists, so users would consent to both presets.
+ */
 export const unauthorizedWwwAuthenticateHeader = (
   invalidToken = false,
 ): string =>
-  `Bearer realm="AIR MCP", resource_metadata="${MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL}"${
+  `Bearer realm="AIR MCP", resource_metadata="${MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL}", scope="${MCP_AIR_OAUTH_REQUIRED_SCOPE}"${
     invalidToken ? ', error="invalid_token"' : ""
   }`;

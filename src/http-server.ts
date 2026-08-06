@@ -19,7 +19,15 @@ import { createAirMcpServer } from "./server.js";
 type SessionEntry = {
   readonly transport: StreamableHTTPServerTransport;
   readonly identity: string;
+  lastSeenAt: number;
 };
+
+/**
+ * Clients are not required to DELETE a session when they are done with it, so idle
+ * sessions are reaped instead of accumulating transports for the process lifetime.
+ */
+const SESSION_IDLE_TIMEOUT_MS = 60 * 60_000;
+const SESSION_SWEEP_INTERVAL_MS = 5 * 60_000;
 
 const jsonRpcError = (status: number, message: string) => ({
   jsonrpc: "2.0" as const,
@@ -114,6 +122,7 @@ export const createMcpAirHttpApp = async (
             sessions.set(initializedSessionId, {
               transport,
               identity: credentials.identity,
+              lastSeenAt: Date.now(),
             });
           },
           onsessionclosed: (closedSessionId) => {
@@ -158,6 +167,7 @@ export const createMcpAirHttpApp = async (
         return;
       }
 
+      entry.lastSeenAt = Date.now();
       await entry.transport.handleRequest(req, res, req.body);
     } catch (error) {
       if (!res.headersSent) {
@@ -180,9 +190,21 @@ export const createMcpAirHttpApp = async (
   app.get(config.httpPath, handleMcp);
   app.delete(config.httpPath, handleMcp);
 
+  const sweep = setInterval(() => {
+    const cutoff = Date.now() - SESSION_IDLE_TIMEOUT_MS;
+    for (const [sessionId, entry] of sessions) {
+      if (entry.lastSeenAt < cutoff) {
+        sessions.delete(sessionId);
+        void entry.transport.close();
+      }
+    }
+  }, SESSION_SWEEP_INTERVAL_MS);
+  sweep.unref();
+
   return {
     app,
     close: async () => {
+      clearInterval(sweep);
       await Promise.all(
         [...sessions.values()].map(({ transport }) => transport.close()),
       );

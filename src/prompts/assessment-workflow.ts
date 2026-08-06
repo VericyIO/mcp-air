@@ -47,7 +47,7 @@ export const registerAssessmentPrompts = (server: McpServer) => {
             type: 'text',
             text: [
               `Review AIR assessment ${assessmentPid}.`,
-              'Use air_get_assessment_report (or resource air://assessments/{pid}/report).',
+              'Start with air_get_assessment_summary, then pull the sections you need with air_get_assessment_report (section, plus offset/limit for list sections such as riskRegister).',
               'Summarize: project overview, top risk themes, control gaps, EU AI Act tier, and recommended next steps.',
             ].join('\n'),
           },

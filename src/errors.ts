@@ -101,6 +101,26 @@ export const toolJsonResult = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
 })
 
+/**
+ * Serialize a payload only if it fits the client's tool-result budget.
+ * Oversized payloads are refused with instructions rather than silently truncated
+ * by the client, which would hand the model a broken JSON fragment.
+ */
+export const toolJsonResultWithinBudget = (
+  data: unknown,
+  maxChars: number,
+  oversizeHint: (actualChars: number) => string,
+) => {
+  const text = JSON.stringify(data, null, 2)
+  if (text.length > maxChars) {
+    return {
+      isError: true as const,
+      content: [{ type: 'text' as const, text: oversizeHint(text.length) }],
+    }
+  }
+  return { content: [{ type: 'text' as const, text }] }
+}
+
 export const runResourceHandler = async <T>(
   resourceName: string,
   handler: () => Promise<T>,
