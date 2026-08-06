@@ -59,6 +59,9 @@ export const MCP_AIR_TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks' as con
 /** MCP server name passed to the SDK (snake_case service prefix per MCP best practices). */
 export const MCP_AIR_SERVER_NAME = 'air-mcp-server' as const
 
+/** Human-readable server display name shown by MCP clients (e.g. Claude's connector UI). */
+export const MCP_AIR_SERVER_TITLE = 'Thalus AIR' as const
+
 /** MCP server semver. */
 export const MCP_AIR_SERVER_VERSION = '1.2.0' as const
 

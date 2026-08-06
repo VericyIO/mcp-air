@@ -3,7 +3,12 @@ import type { TaskStore } from '@modelcontextprotocol/sdk/experimental/tasks/int
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { createIntegratorApiClient, type IntegratorApiClient } from './client/integrator-api.js'
-import { MCP_AIR_SERVER_NAME, MCP_AIR_SERVER_VERSION, type McpAirConfig } from './config.js'
+import {
+  MCP_AIR_SERVER_NAME,
+  MCP_AIR_SERVER_TITLE,
+  MCP_AIR_SERVER_VERSION,
+  type McpAirConfig,
+} from './config.js'
 import { registerAssessmentPrompts } from './prompts/assessment-workflow.js'
 import { registerReportResources } from './resources/reports.js'
 import { registerAssessmentTools } from './tools/assessments.js'
@@ -30,6 +35,7 @@ export const createAirMcpServer = (
   const server = new McpServer(
     {
       name: MCP_AIR_SERVER_NAME,
+      title: MCP_AIR_SERVER_TITLE,
       version: MCP_AIR_SERVER_VERSION,
     },
     {
