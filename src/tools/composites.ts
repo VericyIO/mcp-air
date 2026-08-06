@@ -8,6 +8,7 @@ import {
   MCP_AIR_ASSESSMENT_TASK_TTL_MS,
   MCP_AIR_DOCUMENT_EXTRACTION_POLL_INTERVAL_MS,
   MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS,
+  MCP_AIR_REMOTE_WAIT_TIMEOUT_MS,
 } from '../config.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
 import { pollUntilAssessmentReady, pollUntilDocumentTerminal } from '../poll.js'
@@ -28,27 +29,42 @@ const readOnlyHint = {
   openWorldHint: true,
 } as const
 
-/** MCP Tasks execution — long-running pipeline tools return a task handle immediately. */
+/**
+ * MCP Tasks execution — long-running pipeline tools return a task handle immediately.
+ * Local surface only: MCP Tasks is a draft extension and hosted Claude clients reject a
+ * `taskSupport: 'required'` tool with -32600, so the remote surface uses
+ * air_start_assessment + air_wait_for_assessment instead.
+ */
 const requiredTaskExecution = {
   taskSupport: 'required' as const,
 }
 
 /**
  * Wait tools are plain blocking tools so clients without MCP Tasks support can
- * finish an assessment workflow. Cap timeoutMs at the configured defaults.
- * Task-capable clients can still use air_run_* pipeline tools for non-blocking waits.
+ * finish an assessment workflow. Running out of the wait budget is reported as a
+ * pending result, not an error, so the agent can simply wait again.
+ *
+ * Remote (hosted Claude) callers get a shorter ceiling: Claude aborts a tool call at
+ * 300s, so a longer wait would be killed client-side instead of returning anything.
  */
 export const registerCompositeTools = (
   server: McpServer,
   api: IntegratorApiClient,
   surface: McpAirSurface = 'local',
 ) => {
+  const documentWaitCeilingMs =
+    surface === 'remote'
+      ? MCP_AIR_REMOTE_WAIT_TIMEOUT_MS
+      : MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS
+  const assessmentWaitCeilingMs =
+    surface === 'remote' ? MCP_AIR_REMOTE_WAIT_TIMEOUT_MS : MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS
+
   server.registerTool(
     'air_wait_for_document_extraction',
     {
       title: MCP_AIR_TOOL_TITLES.air_wait_for_document_extraction,
       description:
-        'Block until sourcePid reaches connected or error, or timeoutMs elapses. Uses exponential backoff. Prefer a modest timeoutMs (e.g. 120000) when the client request budget is short. Requires projects:read.',
+        'Wait until sourcePid reaches connected or error, up to timeoutMs. Uses exponential backoff. Returns ready:false with the last observed status if the wait budget runs out — call again with the same sourcePid to keep waiting. Requires projects:read.',
       inputSchema: {
         projectPid: z.string(),
         sourcePid: z.string(),
@@ -56,18 +72,16 @@ export const registerCompositeTools = (
           .number()
           .int()
           .positive()
-          .max(MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS)
+          .max(documentWaitCeilingMs)
           .optional()
-          .describe(
-            `Default ${MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS}ms; max ${MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS}ms`,
-          ),
+          .describe(`Default ${documentWaitCeilingMs}ms; max ${documentWaitCeilingMs}ms`),
       },
       annotations: readOnlyHint,
     },
     async ({ projectPid, sourcePid, timeoutMs }) => {
-      const timeout = timeoutMs ?? MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS
+      const timeout = timeoutMs ?? documentWaitCeilingMs
       try {
-        const result = await pollUntilDocumentTerminal(async () => {
+        const outcome = await pollUntilDocumentTerminal(async () => {
           const documents = await api.listDocuments(projectPid)
           const match = documents.find((row) => row.pid === sourcePid)
           if (match === undefined) {
@@ -75,7 +89,23 @@ export const registerCompositeTools = (
           }
           return { status: String(match.status), document: match }
         }, timeout)
-        return toolJsonResult({ sourcePid, status: result.status, document: result.document })
+
+        if (!outcome.ready) {
+          return toolJsonResult({
+            ready: false,
+            sourcePid,
+            status: outcome.last?.status ?? 'unknown',
+            document: outcome.last?.document,
+            note: `Extraction is still running after ${timeout}ms. Call air_wait_for_document_extraction again with the same sourcePid to keep waiting.`,
+          })
+        }
+
+        return toolJsonResult({
+          ready: true,
+          sourcePid,
+          status: outcome.value.status,
+          document: outcome.value.document,
+        })
       } catch (error) {
         return toolErrorResult(error, 'air_wait_for_document_extraction')
       }
@@ -87,29 +117,38 @@ export const registerCompositeTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment,
       description:
-        'Block until assessment is completed, failed, or reportAvailable, or timeoutMs elapses. Uses exponential backoff. Prefer a modest timeoutMs when the client request budget is short. Requires assessments:read.',
+        'Wait until an assessment is completed, failed, or reportAvailable, up to timeoutMs. Uses exponential backoff. Returns ready:false with the last observed status if the wait budget runs out — call again with the same assessmentPid to keep waiting. Requires assessments:read.',
       inputSchema: {
         assessmentPid: z.string(),
         timeoutMs: z
           .number()
           .int()
           .positive()
-          .max(MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS)
+          .max(assessmentWaitCeilingMs)
           .optional()
-          .describe(
-            `Default ${MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS}ms; max ${MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS}ms`,
-          ),
+          .describe(`Default ${assessmentWaitCeilingMs}ms; max ${assessmentWaitCeilingMs}ms`),
       },
       annotations: readOnlyHint,
     },
     async ({ assessmentPid, timeoutMs }) => {
-      const timeout = timeoutMs ?? MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS
+      const timeout = timeoutMs ?? assessmentWaitCeilingMs
       try {
-        const assessment = await pollUntilAssessmentReady(
+        const outcome = await pollUntilAssessmentReady(
           () => api.getAssessment(assessmentPid),
           timeout,
         )
-        return toolJsonResult(assessment)
+
+        if (!outcome.ready) {
+          return toolJsonResult({
+            ready: false,
+            assessmentPid,
+            status: outcome.last?.status ?? 'unknown',
+            assessment: outcome.last,
+            note: `Assessment is still running after ${timeout}ms. Call air_wait_for_assessment again with the same assessmentPid to keep waiting.`,
+          })
+        }
+
+        return toolJsonResult({ ready: true, assessmentPid, assessment: outcome.value })
       } catch (error) {
         return toolErrorResult(error, 'air_wait_for_assessment')
       }
@@ -159,44 +198,44 @@ export const registerCompositeTools = (
         ...standardAirTaskHandlers,
       },
     )
-  }
 
-  server.experimental.tasks.registerToolTask(
-    'air_run_full_assessment_pipeline',
-    {
-      title: MCP_AIR_TOOL_TITLES.air_run_full_assessment_pipeline,
-      description:
-        'Start assessment on existing artifacts, wait for completion, return report summary. Consumes credits. Returns an MCP Task handle immediately; poll tasks/get until completed.',
-      inputSchema: {
-        projectPid: z.string(),
-        artifactPids: z.array(z.string()).min(1).max(5),
-        name: z.string(),
-        waitTimeoutMs: z.number().int().positive().optional(),
+    server.experimental.tasks.registerToolTask(
+      'air_run_full_assessment_pipeline',
+      {
+        title: MCP_AIR_TOOL_TITLES.air_run_full_assessment_pipeline,
+        description:
+          'Start assessment on existing artifacts, wait for completion, return report summary. Consumes credits. Returns an MCP Task handle immediately; poll tasks/get until completed.',
+        inputSchema: {
+          projectPid: z.string(),
+          artifactPids: z.array(z.string()).min(1).max(5),
+          name: z.string(),
+          waitTimeoutMs: z.number().int().positive().optional(),
+        },
+        annotations: { ...writeHint, destructiveHint: true },
+        execution: requiredTaskExecution,
       },
-      annotations: { ...writeHint, destructiveHint: true },
-      execution: requiredTaskExecution,
-    },
-    {
-      async createTask(
-        { projectPid, artifactPids, name, waitTimeoutMs },
-        { taskStore, taskRequestedTtl },
-      ) {
-        const task = await taskStore.createTask({
-          ttl: taskRequestedTtl ?? MCP_AIR_ASSESSMENT_TASK_TTL_MS,
-          pollInterval: MCP_AIR_ASSESSMENT_POLL_INTERVAL_MS,
-        })
-        void runFullAssessmentPipelineTask(
-          api,
-          taskStore,
-          task.taskId,
-          projectPid,
-          artifactPids,
-          name,
-          waitTimeoutMs ?? MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS,
-        )
-        return { task }
+      {
+        async createTask(
+          { projectPid, artifactPids, name, waitTimeoutMs },
+          { taskStore, taskRequestedTtl },
+        ) {
+          const task = await taskStore.createTask({
+            ttl: taskRequestedTtl ?? MCP_AIR_ASSESSMENT_TASK_TTL_MS,
+            pollInterval: MCP_AIR_ASSESSMENT_POLL_INTERVAL_MS,
+          })
+          void runFullAssessmentPipelineTask(
+            api,
+            taskStore,
+            task.taskId,
+            projectPid,
+            artifactPids,
+            name,
+            waitTimeoutMs ?? MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS,
+          )
+          return { task }
+        },
+        ...standardAirTaskHandlers,
       },
-      ...standardAirTaskHandlers,
-    },
-  )
+    )
+  }
 }

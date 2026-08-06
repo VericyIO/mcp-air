@@ -38,6 +38,12 @@ export const MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL =
 export const MCP_AIR_OAUTH_RESOURCE_IDENTIFIER =
   "https://mcp.air.thalus.ai/mcp" as const;
 
+/**
+ * Scope requested via `WWW-Authenticate`. The remote tool surface spans uploads, project
+ * creation, search, and portfolio, so `fullPipeline` is the preset that actually covers it.
+ */
+export const MCP_AIR_OAUTH_REQUIRED_SCOPE = "fullPipeline" as const;
+
 export type McpAirHttpRuntimeConfig = {
   readonly apiUrl: string;
   readonly httpHost: string;

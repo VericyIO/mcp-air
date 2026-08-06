@@ -13,7 +13,12 @@ import {
   MCP_AIR_TASK_REQUIRED_TOOL_NAMES,
 } from '../src/capabilities.js'
 import type { IntegratorApiClient } from '../src/client/integrator-api.js'
+import {
+  MCP_AIR_MAX_TOOL_RESULT_CHARS,
+  MCP_AIR_REMOTE_WAIT_TIMEOUT_MS,
+} from '../src/config.js'
 import { createAirMcpServer } from '../src/server.js'
+import { MCP_AIR_REMOTE_TOOL_COUNT, MCP_AIR_REMOTE_TOOL_NAMES } from '../src/surface.js'
 import { MCP_AIR_TOOL_TITLES } from '../src/tool-titles.js'
 
 const connectTestClient = (api?: IntegratorApiClient) => {
@@ -37,6 +42,18 @@ const connect = async (api?: IntegratorApiClient) => {
   return { client, server }
 }
 
+const connectRemote = async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const remoteServer = createAirMcpServer(
+    { apiUrl: 'http://localhost:4001', apiKey: 'test-key' },
+    { surface: 'remote' },
+  )
+  const remoteClient = new Client({ name: 'mcp-air-remote-test', version: '1.1.0' })
+  await remoteServer.connect(serverTransport)
+  await remoteClient.connect(clientTransport)
+  return remoteClient.listTools()
+}
+
 const resourceText = (contents: ReadonlyArray<{ text?: string; blob?: string }>, index = 0) => {
   const content = contents[index]
   if (content?.text !== undefined) {
@@ -46,19 +63,56 @@ const resourceText = (contents: ReadonlyArray<{ text?: string; blob?: string }>,
 }
 
 describe('createAirMcpServer', () => {
-  it('omits local-file tool on remote surface', async () => {
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-    const remoteServer = createAirMcpServer(
-      { apiUrl: 'http://localhost:4001', apiKey: 'test-key' },
-      { surface: 'remote' },
-    )
-    const remoteClient = new Client({ name: 'mcp-air-remote-test', version: '1.1.0' })
-    await remoteServer.connect(serverTransport)
-    await remoteClient.connect(clientTransport)
+  it('exposes exactly the hosted-client tool surface on remote', async () => {
+    const tools = await connectRemote()
 
-    const tools = await remoteClient.listTools()
-    expect(tools.tools.map((tool) => tool.name)).not.toContain('air_run_assessment_from_file')
-    expect(tools.tools).toHaveLength(27)
+    expect(tools.tools).toHaveLength(MCP_AIR_REMOTE_TOOL_COUNT)
+    expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
+      [...MCP_AIR_REMOTE_TOOL_NAMES].sort(),
+    )
+  })
+
+  it('omits tools hosted Claude clients cannot drive', async () => {
+    const tools = await connectRemote()
+    const names = tools.tools.map((tool) => tool.name)
+
+    // No local filesystem, and no draft Tasks extension.
+    expect(names).not.toContain('air_run_assessment_from_file')
+    expect(names).not.toContain('air_run_full_assessment_pipeline')
+
+    // The presigned upload pair stays: hosted clients can PUT to the storage host.
+    expect(names).toContain('air_upload_document_init')
+    expect(names).toContain('air_upload_document_complete')
+
+    for (const tool of tools.tools) {
+      expect(tool.execution?.taskSupport).not.toBe('required')
+    }
+  })
+
+  it('caps remote wait tools under the hosted tool-call timeout', async () => {
+    const tools = await connectRemote()
+
+    for (const name of ['air_wait_for_document_extraction', 'air_wait_for_assessment'] as const) {
+      const tool = tools.tools.find((row) => row.name === name)
+      const timeoutMs = (
+        tool?.inputSchema as { properties?: { timeoutMs?: { maximum?: number } } } | undefined
+      )?.properties?.timeoutMs
+      expect(timeoutMs?.maximum).toBe(MCP_AIR_REMOTE_WAIT_TIMEOUT_MS)
+    }
+  })
+
+  it('annotates every remote tool with a title and a read or write hint', async () => {
+    const tools = await connectRemote()
+
+    for (const tool of tools.tools) {
+      expect(tool.title).toBe(
+        MCP_AIR_TOOL_TITLES[tool.name as keyof typeof MCP_AIR_TOOL_TITLES],
+      )
+      expect(tool.name.length).toBeLessThanOrEqual(64)
+      expect(tool.annotations?.readOnlyHint === true).toBe(
+        tool.annotations?.destructiveHint !== true,
+      )
+    }
   })
 
   it('registers the expected MCP surface via protocol handshake', async () => {
@@ -132,5 +186,79 @@ describe('createAirMcpServer', () => {
     })
     expect(JSON.parse(resourceText(projectResource.contents))).toEqual(assessments)
     expect(api.listAssessments).toHaveBeenCalledWith(projectPid)
+  })
+})
+
+describe('air_get_assessment_report size handling', () => {
+  const bigReport = () => ({
+    assessmentPid: 'pasm_big',
+    projectName: 'Demo',
+    overview: { totalRisks: 400 },
+    riskRegister: Array.from({ length: 400 }, (_, index) => ({
+      id: `risk_${index}`,
+      title: `Risk ${index}`,
+      detail: 'x'.repeat(600),
+    })),
+  })
+
+  const callReport = async (args: Record<string, unknown>) => {
+    const api = {
+      getAssessmentReport: vi.fn().mockResolvedValue(bigReport()),
+    } as unknown as IntegratorApiClient
+    const { client } = await connect(api)
+    const result = await client.callTool({ name: 'air_get_assessment_report', arguments: args })
+    const block = Array.isArray(result.content)
+      ? result.content.find((row) => row.type === 'text')
+      : undefined
+    return {
+      isError: result.isError === true,
+      text: block?.type === 'text' ? block.text : '',
+    }
+  }
+
+  it('returns a section index instead of a truncated report', async () => {
+    const { isError, text } = await callReport({ assessmentPid: 'pasm_big' })
+    const payload = JSON.parse(text)
+
+    expect(isError).toBe(false)
+    expect(text.length).toBeLessThanOrEqual(MCP_AIR_MAX_TOOL_RESULT_CHARS)
+    expect(payload.complete).toBe(false)
+    expect(payload.summary.riskRegisterCount).toBe(400)
+    expect(payload.sections.find((row: { section: string }) => row.section === 'riskRegister')).toMatchObject(
+      { present: true, itemCount: 400 },
+    )
+  })
+
+  it('pages a list section and reports where to resume', async () => {
+    const first = JSON.parse((await callReport({ assessmentPid: 'pasm_big', section: 'riskRegister' })).text)
+
+    expect(first.totalItems).toBe(400)
+    expect(first.offset).toBe(0)
+    expect(first.complete).toBe(false)
+    expect(first.nextOffset).toBe(first.returned)
+    expect(first.riskRegister).toHaveLength(first.returned)
+
+    const second = JSON.parse(
+      (await callReport({ assessmentPid: 'pasm_big', section: 'riskRegister', offset: first.nextOffset })).text,
+    )
+    expect(second.offset).toBe(first.nextOffset)
+    expect(second.riskRegister[0].id).toBe(`risk_${first.nextOffset}`)
+  })
+
+  it('honours an explicit limit', async () => {
+    const { text } = await callReport({
+      assessmentPid: 'pasm_big',
+      section: 'riskRegister',
+      offset: 10,
+      limit: 3,
+    })
+    const payload = JSON.parse(text)
+
+    expect(payload.returned).toBe(3)
+    expect(payload.riskRegister.map((row: { id: string }) => row.id)).toEqual([
+      'risk_10',
+      'risk_11',
+      'risk_12',
+    ])
   })
 })

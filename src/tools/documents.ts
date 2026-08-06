@@ -121,7 +121,7 @@ export const registerDocumentTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_upload_document_init,
       description:
-        "Start presigned upload: returns uploadUrl and s3Key. PUT file bytes to uploadUrl, then call air_upload_document_complete. Requires projects:write.",
+        "Start a presigned upload: returns uploadUrl and s3Key. PUT the raw file bytes to uploadUrl with the same contentType you passed here and no other headers — the URL signs content-type and host only, so any x-amz-* header (notably the checksum headers AWS SDKs add by default) invalidates the signature. Then call air_upload_document_complete with the returned s3Key. Requires projects:write.",
       inputSchema: {
         projectPid: z.string(),
         filename: z.string().describe("Original filename including extension"),
@@ -145,7 +145,7 @@ export const registerDocumentTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_upload_document_complete,
       description:
-        "Finalize presigned upload after PUT to uploadUrl. Dispatches document extraction workflow. Requires projects:write.",
+        "Finalize a presigned upload after the PUT to uploadUrl succeeded. Dispatches the document extraction workflow. Requires projects:write.",
       inputSchema: {
         projectPid: z.string(),
         s3Key: z.string().describe("Storage key from air_upload_document_init"),

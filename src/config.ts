@@ -30,6 +30,20 @@ export const MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS = 30 * 60_000
 /** Multiplier applied between poll attempts until max interval is reached. */
 export const MCP_AIR_POLL_BACKOFF_MULTIPLIER = 1.5 as const
 
+/**
+ * Longest blocking wait a hosted Claude client may request.
+ * Claude.ai and Claude Desktop abort a tool call at 300s, so the wait tools must
+ * return a pending result well before that instead of being killed mid-flight.
+ */
+export const MCP_AIR_REMOTE_WAIT_TIMEOUT_MS = 240_000 as const
+
+/**
+ * Serialized-character budget for a single tool result on the remote surface.
+ * Claude.ai and Claude Desktop truncate tool results at roughly 150,000 characters;
+ * this leaves headroom for the surrounding protocol envelope.
+ */
+export const MCP_AIR_MAX_TOOL_RESULT_CHARS = 120_000 as const
+
 /** Per-request timeout for integrator API fetch calls. */
 export const MCP_AIR_REQUEST_TIMEOUT_MS = 60_000 as const
 

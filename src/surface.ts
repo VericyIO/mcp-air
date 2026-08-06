@@ -1,8 +1,13 @@
 /** MCP tool surface — local stdio vs remote Streamable HTTP. */
 export type McpAirSurface = 'local' | 'remote'
 
-export const MCP_AIR_REMOTE_TOOL_COUNT = 27 as const
+export const MCP_AIR_REMOTE_TOOL_COUNT = 26 as const
 
+/**
+ * Remote surface. Drops the two tools hosted Claude clients cannot drive:
+ * - `air_run_assessment_from_file` (no local filesystem)
+ * - `air_run_full_assessment_pipeline` (MCP Tasks is a draft extension hosted clients reject)
+ */
 export const MCP_AIR_REMOTE_TOOL_NAMES = [
   'air_list_domains',
   'air_get_domain',
@@ -30,5 +35,4 @@ export const MCP_AIR_REMOTE_TOOL_NAMES = [
   'air_get_domain_portfolio',
   'air_wait_for_document_extraction',
   'air_wait_for_assessment',
-  'air_run_full_assessment_pipeline',
 ] as const satisfies ReadonlyArray<string>
