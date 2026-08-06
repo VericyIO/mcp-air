@@ -263,6 +263,10 @@ pnpm test
 - Use least-privilege API key scopes. Write tools (`air_start_assessment`, uploads) consume organization credits.
 - Never commit API keys. Use `env` or `envFile` in MCP client configuration.
 
+## Privacy
+
+The AIR cloud (Thalus) processes the documents, project data, and account information you submit through this server in order to run assessments and generate reports. See the [Privacy Policy](https://air.thalus.ai/privacy) for details on data collection, usage and storage, third-party sharing, and retention. Contact `privacy@thalus.ai` with privacy questions.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

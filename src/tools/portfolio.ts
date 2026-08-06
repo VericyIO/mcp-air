@@ -22,7 +22,7 @@ export const registerPortfolioTools = (server: McpServer, api: IntegratorApiClie
         orgSlug: z.string(),
         domainSlug: z.string(),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_domain_portfolio },
     },
     async ({ orgSlug, domainSlug }) => {
       try {

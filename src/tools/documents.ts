@@ -34,7 +34,7 @@ export const registerDocumentTools = (
           .optional()
           .describe("Include archived document sources"),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_documents },
     },
     async ({ projectPid, includeArchived }) => {
       try {
@@ -57,7 +57,7 @@ export const registerDocumentTools = (
         projectPid: z.string(),
         sourcePid: z.string().describe("Document source pid (psrc_*)"),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_document_download_url },
     },
     async ({ projectPid, sourcePid }) => {
       try {
@@ -80,7 +80,7 @@ export const registerDocumentTools = (
         projectPid: z.string(),
         includeArchived: z.boolean().optional(),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_artifacts },
     },
     async ({ projectPid, includeArchived }) => {
       try {
@@ -103,7 +103,7 @@ export const registerDocumentTools = (
         projectPid: z.string(),
         artifactPid: z.string().describe("Artifact pid (artf_*)"),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_artifact_text },
     },
     async ({ projectPid, artifactPid }) => {
       try {
@@ -127,7 +127,7 @@ export const registerDocumentTools = (
         filename: z.string().describe("Original filename including extension"),
         contentType: z.string().describe("MIME type, e.g. application/pdf"),
       },
-      annotations: writeHint,
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_upload_document_init },
     },
     async ({ projectPid, filename, contentType }) => {
       try {
@@ -152,7 +152,7 @@ export const registerDocumentTools = (
         filename: z.string(),
         contentType: z.string(),
       },
-      annotations: writeHint,
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_upload_document_complete },
     },
     async ({ projectPid, s3Key, filename, contentType }) => {
       try {

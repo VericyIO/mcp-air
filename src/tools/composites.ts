@@ -76,7 +76,7 @@ export const registerCompositeTools = (
           .optional()
           .describe(`Default ${documentWaitCeilingMs}ms; max ${documentWaitCeilingMs}ms`),
       },
-      annotations: readOnlyHint,
+      annotations: { ...readOnlyHint, title: MCP_AIR_TOOL_TITLES.air_wait_for_document_extraction },
     },
     async ({ projectPid, sourcePid, timeoutMs }) => {
       const timeout = timeoutMs ?? documentWaitCeilingMs
@@ -128,7 +128,7 @@ export const registerCompositeTools = (
           .optional()
           .describe(`Default ${assessmentWaitCeilingMs}ms; max ${assessmentWaitCeilingMs}ms`),
       },
-      annotations: readOnlyHint,
+      annotations: { ...readOnlyHint, title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment },
     },
     async ({ assessmentPid, timeoutMs }) => {
       const timeout = timeoutMs ?? assessmentWaitCeilingMs
@@ -171,7 +171,11 @@ export const registerCompositeTools = (
             .optional()
             .describe('MIME type (inferred from extension when omitted)'),
         },
-        annotations: { ...writeHint, destructiveHint: true },
+        annotations: {
+          ...writeHint,
+          destructiveHint: true,
+          title: MCP_AIR_TOOL_TITLES.air_run_assessment_from_file,
+        },
         execution: requiredTaskExecution,
       },
       {
@@ -211,7 +215,11 @@ export const registerCompositeTools = (
           name: z.string(),
           waitTimeoutMs: z.number().int().positive().optional(),
         },
-        annotations: { ...writeHint, destructiveHint: true },
+        annotations: {
+          ...writeHint,
+          destructiveHint: true,
+          title: MCP_AIR_TOOL_TITLES.air_run_full_assessment_pipeline,
+        },
         execution: requiredTaskExecution,
       },
       {

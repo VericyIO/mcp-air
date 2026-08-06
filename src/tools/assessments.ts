@@ -112,7 +112,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
       title: MCP_AIR_TOOL_TITLES.air_list_assessments,
       description: 'List assessment summaries for a project. Requires assessments:read.',
       inputSchema: { projectPid: z.string() },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_assessments },
     },
     async ({ projectPid }) => {
       try {
@@ -132,7 +132,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
       inputSchema: {
         assessmentPid: z.string().describe('Assessment pid (pasm_*)'),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment },
     },
     async ({ assessmentPid }) => {
       try {
@@ -168,7 +168,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
           .optional()
           .describe('Max items to return when section is a list'),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_report },
     },
     async ({ assessmentPid, section, offset, limit }) => {
       try {
@@ -238,7 +238,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
       description:
         'Fetch a slim assessment report summary (overview, quality, EU AI Act tier, and section counts) without the full risk/evidence payload. Prefer this over air_get_assessment_report for triage. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary },
     },
     async ({ assessmentPid }) => {
       try {
@@ -257,7 +257,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
       description:
         'List the deduplicated open EU AI Act fact worklist for an assessment (each missing fact once, with criteria it unblocks). Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_open_facts },
     },
     async ({ assessmentPid }) => {
       try {
@@ -287,7 +287,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
           )
           .min(1),
       },
-      annotations: writeHint,
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_submit_fact_answers },
     },
     async ({ assessmentPid, answers }) => {
       try {
@@ -305,7 +305,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
       description:
         'List per-stage checkpoint logs for an assessment run. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_stages },
     },
     async ({ assessmentPid }) => {
       try {
@@ -323,7 +323,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
       description:
         'List artifacts used as inputs when the assessment report was generated. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_input_artifacts },
     },
     async ({ assessmentPid }) => {
       try {
@@ -349,7 +349,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
           .max(5)
           .describe('Up to five artifact pids'),
       },
-      annotations: writeHint,
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_create_assessment_draft },
     },
     async ({ projectPid, name, artifactPids }) => {
       try {
@@ -375,7 +375,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
           .max(5)
           .describe('Artifact pids from air_list_artifacts (max 5)'),
       },
-      annotations: writeHint,
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_start_assessment },
     },
     async ({ projectPid, name, artifactPids }) => {
       try {
@@ -393,7 +393,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
       description:
         'Retry a failed assessment from the last completed stage. Requires assessments:write and consumes credits.',
       inputSchema: { assessmentPid: z.string() },
-      annotations: writeHint,
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_retry_assessment },
     },
     async ({ assessmentPid }) => {
       try {

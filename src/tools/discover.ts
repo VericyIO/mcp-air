@@ -30,7 +30,7 @@ export const registerDiscoverTools = (
       description:
         "List domains visible to the API key. For domain-scoped service account keys, returns the single bound domain. Requires domains:read scope.",
       inputSchema: {},
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_domains },
     },
     async () => {
       try {
@@ -55,7 +55,7 @@ export const registerDiscoverTools = (
         orgSlug: z.string().optional().describe("Organization slug for lookup"),
         domainSlug: z.string().optional().describe("Domain slug for lookup"),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_domain },
     },
     async ({ domainPid, orgSlug, domainSlug }) => {
       try {
@@ -106,7 +106,7 @@ export const registerDiscoverTools = (
           .describe("Page size (default 20)"),
         search: z.string().optional().describe("Filter projects by name"),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_projects },
     },
     async ({ domainPid, page, pageSize, search }) => {
       try {
@@ -137,7 +137,7 @@ export const registerDiscoverTools = (
         domainSlug: z.string().optional(),
         projectSlug: z.string().optional(),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_project },
     },
     async ({ projectPid, orgSlug, domainSlug, projectSlug }) => {
       try {
@@ -190,7 +190,7 @@ export const registerDiscoverTools = (
           .optional()
           .describe("Optional project description"),
       },
-      annotations: writeHint,
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_create_project },
     },
     async ({ domainPid, name, slug, description }) => {
       try {
@@ -227,7 +227,7 @@ export const registerDiscoverTools = (
           .optional()
           .describe("Max results (default 20)"),
       },
-      annotations: readOnly,
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_search },
     },
     async ({ q, kind, limit }) => {
       try {
