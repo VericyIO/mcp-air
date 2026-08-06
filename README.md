@@ -54,7 +54,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.1.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.2.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -71,7 +71,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.1.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.2.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -89,7 +89,7 @@ Ask your agent to run `air_list_domains` and `air_list_projects`. You should see
 **MCP Inspector** (optional):
 
 ```bash
-AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.1.0
+AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.2.0
 ```
 
 ## Remote HTTP (operators)
@@ -140,7 +140,7 @@ Full scope reference: [Authentication guide](https://air.thalus.ai/docs/guides/a
 | Client             | Config file                                                            | Notes                                                                                                                                           |
 | ------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Cursor**         | `.cursor/mcp.json` or `~/.cursor/mcp.json`                             | Restart after changes                                                                                                                           |
-| **Claude Code**    | `.mcp.json` or `~/.claude.json`                                        | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.1.0` — [docs](https://code.claude.com/docs/en/mcp) |
+| **Claude Code**    | `.mcp.json` or `~/.claude.json`                                        | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.2.0` — [docs](https://code.claude.com/docs/en/mcp) |
 | **Claude Desktop** | See platform paths below                                               | Quit and reopen the app                                                                                                                         |
 | **VS Code**        | `.vscode/mcp.json` or user config via **MCP: Open User Configuration** | Use Copilot **Agent** mode; root key is `servers`                                                                                               |
 | **Windsurf**       | `~/.codeium/windsurf/mcp_config.json`                                  | Same `mcpServers` JSON as Cursor                                                                                                                |
@@ -259,7 +259,7 @@ pnpm test
 ## Security
 
 - The MCP process runs with your OS user privileges. Tools such as `air_run_assessment_from_file` can read any local path your user can access.
-- Pin the package version in production (`@thalus-ai/mcp-air@1.1.0`) rather than floating `@latest`.
+- Pin the package version in production (`@thalus-ai/mcp-air@1.2.0`) rather than floating `@latest`.
 - Use least-privilege API key scopes. Write tools (`air_start_assessment`, uploads) consume organization credits.
 - Never commit API keys. Use `env` or `envFile` in MCP client configuration.
 
