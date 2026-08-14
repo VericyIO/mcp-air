@@ -9,10 +9,12 @@ This package ships two transports:
 
 | Transport           | Who uses it                                        | How                                                  |
 | ------------------- | -------------------------------------------------- | ---------------------------------------------------- |
-| **stdio** (default) | Local IDE agents (Cursor, Claude Code, VS Code, …) | `npx @thalus-ai/mcp-air` + `AIR_API_KEY`             |
+| **stdio** (default) | Local IDE agents (Cursor, Claude Code, VS Code, …) | `npx @thalus-ai/mcp-air`, with or without a key      |
 | **Streamable HTTP** | Claude Directory / remote MCP clients              | Hosted at `https://mcp.air.thalus.ai/mcp` with OAuth |
 
-Local assessment workloads still execute on Thalus cloud via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). You provide a domain-scoped API key for stdio; remote Directory clients authorize through the AIR portal (OAuth). No local database, worker, or Docker stack is required for stdio.
+Local assessment workloads still execute on Thalus cloud via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). For stdio you provide a domain-scoped API key, or let the server store one when you create an account in chat; remote Directory clients authorize through the AIR portal (OAuth). No local database, worker, or Docker stack is required for stdio.
+
+**No AIR account?** Either transport can create one from inside the conversation — see [Starting without an account](#starting-without-an-account).
 
 ## Overview
 
@@ -33,8 +35,8 @@ Local assessment workloads still execute on Thalus cloud via the [AIR Integrator
 ## Prerequisites
 
 - **Node.js 20+**
-- An [AIR](https://air.thalus.ai) organization with active billing (assessments consume credits)
-- A **domain-scoped API key** with scopes appropriate for your workflow (see [API key scopes](#api-key-scopes))
+- An [AIR](https://air.thalus.ai) organization with active billing (assessments consume credits) — or create one from the conversation, see [Starting without an account](#starting-without-an-account)
+- A credential, from any of three sources — see [Credentials](#credentials). **None is needed to start**: with no credential the server boots in setup mode so you can create an account.
 
 ## Quick start
 
@@ -54,7 +56,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.2.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.3.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -71,7 +73,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.2.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.3.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -89,7 +91,7 @@ Ask your agent to run `air_list_domains` and `air_list_projects`. You should see
 **MCP Inspector** (optional):
 
 ```bash
-AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.2.0
+AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.3.0
 ```
 
 ## Remote HTTP (operators)
@@ -112,9 +114,69 @@ Remote clients authorize with OAuth 2.0 against `https://api.air.thalus.ai` (aut
 
 End-user setup: [Remote MCP server (OAuth)](https://air.thalus.ai/docs/guides/mcp-remote-oauth).
 
+## Starting without an account
+
+**Both transports** can be used before you have an AIR account. On stdio the server boots in setup mode with no credential; on the remote transport the connector can be added without a token. These tools need no credential:
+
+| Tool                                     | What it does                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------- |
+| `air_create_account`                     | Collects name, email, organization, code and terms — in a form or a dialog |
+| `air_submit_feedback`                    | Sends feedback to Thalus — include a contact email so they can reply |
+| `air_signup_send_code`, `air_signup_verify_code` | The form's own callbacks; hidden from the model                |
+| `air_sign_out`                           | stdio only; clears the stored credential                           |
+
+On the remote transport, everything else is protected. The first time the assistant calls a protected tool without a token, the server answers **HTTP 401** with a `WWW-Authenticate` challenge, and the client shows its inline **Connect** card. You authorize in a popup, the client retries the same call automatically, and the conversation carries on — nothing is lost. This is [lazy authentication](https://claude.com/docs/connectors/building/lazy-authentication); the alternative, refusing every request until you sign in first, is what made an agent-first signup impossible.
+
+Creating an account in chat:
+
+1. Ask the assistant to create an AIR account. It calls `air_create_account`.
+2. Type your name, work email and organization. **You** type them — the model supplies nothing, and what you type does not enter its context.
+3. Enter the code emailed to you, tick the terms box, and submit. The terms tick is read from the checkbox only; the model cannot set it, and the API refuses without it.
+4. On the remote transport, press the sign-in button: it gives your browser a session, so the OAuth consent screen appears directly next time. On stdio there is nothing more to do — the key is already stored and the full tool set is available.
+
+Your organization starts on the Free plan with one assessment credit per 30 days. Use `air_get_credit_balance` to see where you stand and `air_request_credits` to ask for more.
+
+### What your client supports
+
+`air_create_account` uses the richest input your client offers:
+
+| Client capability                            | What happens                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------ |
+| [MCP Apps](https://modelcontextprotocol.io/) | A form renders in the conversation. Fields never reach the model at all. |
+| Elicitation only (**Claude Code**)           | Two dialogs: details, then the code and the terms checkbox.              |
+| Neither                                      | The portal signup link, and it stops. It will not ask the model for your details. |
+
+## Credentials
+
+The stdio server resolves a credential in this order, and **starts either way**:
+
+| Order | Source                                      | Notes                                                              |
+| ----- | ------------------------------------------- | -------------------------------------------------------------------- |
+| 1     | `AIR_API_KEY`                               | Set in your MCP client config. Wins over anything on disk.         |
+| 2     | `~/.air/credentials.json`                   | Written by `air_create_account`. Override with `AIR_CREDENTIALS_PATH`. |
+| 3     | none → **setup mode**                       | Only the tools that work without an account are offered.           |
+
+**The stored file holds a bearer key**, so it is written with mode `0600` (owner read/write only) in a directory created `0700`. The key is written straight to that file and **never returned in a tool result**, so it does not end up in your conversation transcript or your client's logs. Alongside it the file records the API URL, org slug, domain pid, domain slug and creation time, so the server can answer "which account is this?" without a network call.
+
+A damaged or unreadable credential file is reported on stderr and treated as no credential, so the server still starts in setup mode; `air_sign_out` removes the file.
+
+### Setup mode
+
+With no credential, the server offers five tools — `air_create_account`, `air_submit_feedback`, `air_sign_out`, and the signup form's two callbacks. Everything else is registered but disabled, so it is not offered and cannot be called.
+
+The moment an account is created, the key is stored and the full surface is enabled, and the server emits `tools/list_changed`. **No restart is needed** — the client sees the tool list grow in place.
+
+### Signing out
+
+`air_sign_out` deletes `~/.air/credentials.json` and returns to setup mode. The account itself is untouched; you can sign back in with the same key or create another account.
+
+**Signing out forgets the key on this machine — it does not revoke it.** The key keeps working anywhere else it is held. If the machine was lost, shared, or is no longer yours, revoke the key itself in the [AIR portal](https://air.thalus.ai): open your domain → **API Keys**, find the key for the MCP service account, and revoke it there.
+
+If your key came from **`AIR_API_KEY`**, there is no file to delete and the tool says so rather than reporting a success: remove the variable from your client configuration and restart. If a stored file also exists, the result tells you that too, since that file would take over once the variable is gone.
+
 ## Configuration
 
-You only need **`AIR_API_KEY`**. The server connects to production AIR automatically.
+For stdio you can set **`AIR_API_KEY`**, or create an account in the conversation and let the server store one. The server connects to production AIR automatically.
 
 ### API key scopes
 
@@ -140,7 +202,7 @@ Full scope reference: [Authentication guide](https://air.thalus.ai/docs/guides/a
 | Client             | Config file                                                            | Notes                                                                                                                                           |
 | ------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Cursor**         | `.cursor/mcp.json` or `~/.cursor/mcp.json`                             | Restart after changes                                                                                                                           |
-| **Claude Code**    | `.mcp.json` or `~/.claude.json`                                        | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.2.0` — [docs](https://code.claude.com/docs/en/mcp) |
+| **Claude Code**    | `.mcp.json` or `~/.claude.json`                                        | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.3.0` — [docs](https://code.claude.com/docs/en/mcp) |
 | **Claude Desktop** | See platform paths below                                               | Quit and reopen the app                                                                                                                         |
 | **VS Code**        | `.vscode/mcp.json` or user config via **MCP: Open User Configuration** | Use Copilot **Agent** mode; root key is `servers`                                                                                               |
 | **Windsurf**       | `~/.codeium/windsurf/mcp_config.json`                                  | Same `mcpServers` JSON as Cursor                                                                                                                |
@@ -159,7 +221,7 @@ Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/
 
 ## Capabilities
 
-### Tools (28 stdio / 26 remote)
+### Tools (35 stdio / 32 remote)
 
 | Category        | Tools                                                                                                                                                                                                                       |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -168,8 +230,12 @@ Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/
 | **Assessments** | `air_list_assessments`, `air_get_assessment`, `air_get_assessment_report`, `air_get_assessment_summary`, `air_list_open_facts`, `air_submit_fact_answers`, `air_get_assessment_stages`, `air_get_assessment_input_artifacts`, `air_create_assessment_draft`, `air_start_assessment`, `air_retry_assessment` |
 | **Portfolio**   | `air_get_domain_portfolio`                                                                                                                                                                                                  |
 | **Composites**  | `air_wait_for_document_extraction`, `air_wait_for_assessment`, `air_run_assessment_from_file`†, `air_run_full_assessment_pipeline`†                                                                                         |
+| **Account**     | `air_create_account`‡, `air_signup_send_code`‡§, `air_signup_verify_code`‡§, `air_sign_out`¶                                                                                                                                |
+| **Support**     | `air_submit_feedback`‡, `air_request_credits`, `air_get_credit_balance`                                                                                                                                                     |
 
-† stdio only
+† stdio only  ‡ needs no credential  § form-only, hidden from the model  ¶ stdio only — it exists where a credential file can
+
+The stdio count is one higher than the remote count because `air_sign_out` manages the local credential file, and the hosted transport has none: there, OAuth is the credential.
 
 `air_wait_for_*` block with exponential backoff until the resource is ready or `timeoutMs` elapses, then return `ready: false` with the last observed status — call again with the same pid to keep waiting. Pipeline tools (`air_run_assessment_from_file`, `air_run_full_assessment_pipeline`) use the [MCP Tasks extension](https://modelcontextprotocol.io/extensions/tasks/overview) and return a task handle immediately, so they require a Tasks-capable client.
 
@@ -218,6 +284,12 @@ The section index lists every section with its serialized size and item count, s
 | `air://assessments/{assessmentPid}/stages` | Stage execution log              |
 | `air://projects/{projectPid}/assessments`  | Assessments for a project        |
 
+### App resource (1)
+
+| URI                          | Description                                                          |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `ui://air/signup-form.html`  | The in-chat signup form, served as `text/html;profile=mcp-app`       |
+
 ### Prompts (3)
 
 | Name                       | Purpose                                 |
@@ -228,6 +300,7 @@ The section index lists every section with its serialized size and item count, s
 
 ## Typical workflow
 
+0. No account yet? `air_create_account` (remote transport) — see [Starting without an account](#starting-without-an-account)
 1. `air_list_domains` → obtain `domainPid`
 2. `air_list_projects` → obtain `projectPid` (or `air_create_project` with **fullPipeline**)
 3. Upload evidence: `air_run_assessment_from_file` (stdio), or `air_upload_document_init` → PUT → `air_upload_document_complete` → `air_wait_for_document_extraction`
@@ -259,7 +332,7 @@ pnpm test
 ## Security
 
 - The MCP process runs with your OS user privileges. Tools such as `air_run_assessment_from_file` can read any local path your user can access.
-- Pin the package version in production (`@thalus-ai/mcp-air@1.2.0`) rather than floating `@latest`.
+- Pin the package version in production (`@thalus-ai/mcp-air@1.3.0`) rather than floating `@latest`.
 - Use least-privilege API key scopes. Write tools (`air_start_assessment`, uploads) consume organization credits.
 - Never commit API keys. Use `env` or `envFile` in MCP client configuration.
 

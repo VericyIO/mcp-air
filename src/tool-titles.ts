@@ -1,4 +1,4 @@
-import { MCP_AIR_EXPECTED_TOOL_NAMES } from './capabilities.js'
+import { MCP_AIR_STDIO_SESSION_TOOL_NAMES } from './capabilities.js'
 
 /** Human-readable MCP tool titles (Claude Directory requirement). */
 export const MCP_AIR_TOOL_TITLES = {
@@ -30,4 +30,11 @@ export const MCP_AIR_TOOL_TITLES = {
   air_wait_for_assessment: 'Wait for assessment',
   air_run_assessment_from_file: 'Run assessment from local file',
   air_run_full_assessment_pipeline: 'Run full assessment pipeline',
-} as const satisfies Record<(typeof MCP_AIR_EXPECTED_TOOL_NAMES)[number], string>
+  air_submit_feedback: 'Send feedback to Thalus',
+  air_request_credits: 'Request more credits',
+  air_get_credit_balance: 'Get credit balance',
+  air_create_account: 'Create an AIR account',
+  air_signup_send_code: 'Signup: send verification code',
+  air_signup_verify_code: 'Signup: verify code',
+  air_sign_out: 'Sign out of AIR on this machine',
+} as const satisfies Record<(typeof MCP_AIR_STDIO_SESSION_TOOL_NAMES)[number], string>

@@ -21,17 +21,87 @@ export class IntegratorApiError extends Error {
   }
 }
 
+/**
+ * The API's own next step for a 402. It knows whether the org can buy credits
+ * and what the trial state is, so its wording beats anything composed here.
+ */
+const recoveryFromBody = (body: string): string | undefined => {
+  try {
+    const parsed: unknown = JSON.parse(body)
+    if (typeof parsed !== 'object' || parsed === null) {
+      return undefined
+    }
+    const recovery = (parsed as { readonly recovery?: unknown }).recovery
+    return typeof recovery === 'string' && recovery.trim().length > 0
+      ? recovery.trim()
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The API is precise in seconds; a person needs language. `retryAfter: 85178`
+ * rendered literally tells a user nothing they can act on.
+ */
+export const humanRetryAfter = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 'shortly'
+  }
+  if (seconds < 60) {
+    return 'in under a minute'
+  }
+  if (seconds < 3_600) {
+    const minutes = Math.round(seconds / 60)
+    return `in about ${String(minutes)} minute${minutes === 1 ? '' : 's'}`
+  }
+  if (seconds < 20 * 3_600) {
+    const hours = Math.round(seconds / 3_600)
+    return `in about ${String(hours)} hour${hours === 1 ? '' : 's'}`
+  }
+  if (seconds < 48 * 3_600) {
+    return 'tomorrow'
+  }
+  const days = Math.round(seconds / 86_400)
+  return `in about ${String(days)} days`
+}
+
+const retryAfterFromBody = (body: string): number | undefined => {
+  try {
+    const parsed: unknown = JSON.parse(body)
+    if (typeof parsed !== 'object' || parsed === null) {
+      return undefined
+    }
+    const retryAfter = (parsed as { readonly retryAfter?: unknown }).retryAfter
+    return typeof retryAfter === 'number' ? retryAfter : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export const formatIntegratorApiError = (status: number, body: string): string => {
   const trimmed = body.trim()
   const detail = trimmed.length > 0 ? trimmed : '(empty response body)'
+
+  if (status === 402) {
+    const recovery = recoveryFromBody(body)
+    return recovery === undefined
+      ? `AIR API billing error (402). Insufficient credits or inactive billing. Response: ${detail}`
+      : `AIR API billing error (402). ${recovery} Use air_request_credits to ask Thalus, or air_get_credit_balance to see the balance and the purchase link.`
+  }
+
+  if (status === 429) {
+    const retryAfter = retryAfterFromBody(body)
+    return retryAfter === undefined
+      ? 'AIR API rate limit reached (429). Try again shortly.'
+      : `AIR API rate limit reached (429). Try again ${humanRetryAfter(retryAfter)}.`
+  }
 
   switch (status) {
     case 401:
       return `AIR API authentication failed (401). Verify ${'AIR_API_KEY'} is valid and not revoked. See https://air.thalus.ai/docs/guides/getting-started`
     case 403:
       return `AIR API forbidden (403). Your API key may lack the required scope for this operation. Use assessmentRunner for assess-only flows or fullPipeline for uploads, search, and portfolio. Response: ${detail}`
-    case 402:
-      return `AIR API billing error (402). Insufficient credits or inactive billing. Response: ${detail}`
     case 404:
       return `AIR API not found (404). Check domainPid, projectPid, or assessmentPid. Response: ${detail}`
     case 409:
@@ -72,6 +142,10 @@ const scopeHints: Readonly<Record<string, string>> = {
   air_wait_for_assessment: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   air_run_assessment_from_file: `Requires scopes: ${MCP_INTEGRATOR_API_KEY_SCOPE_PROJECTS_WRITE}, ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_WRITE} (fullPipeline preset)`,
   air_run_full_assessment_pipeline: `Requires scopes: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_WRITE}, ${MCP_INTEGRATOR_API_KEY_SCOPE_PROJECTS_READ}`,
+  air_submit_feedback: 'Requires no scope. Works with no account at all when you supply a contact email',
+  air_request_credits:
+    'Requires no scope beyond a valid credential; a domain API key must supply a contact email',
+  air_get_credit_balance: 'Requires no scope beyond a valid credential',
   'resource:assessment-report': `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   'resource:assessment-stages': `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   'resource:project-assessments': `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,

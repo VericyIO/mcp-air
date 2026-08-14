@@ -63,29 +63,55 @@ export const MCP_AIR_SERVER_NAME = 'air-mcp-server' as const
 export const MCP_AIR_SERVER_TITLE = 'Thalus AIR' as const
 
 /** MCP server semver. */
-export const MCP_AIR_SERVER_VERSION = '1.2.0' as const
+export const MCP_AIR_SERVER_VERSION = '1.3.0' as const
 
 /** Default page size for list tools when the caller omits `limit`. */
 export const MCP_AIR_DEFAULT_LIST_LIMIT = 20 as const
 
+/** Where a client without MCP Apps sends the person instead. */
+export const MCP_AIR_PORTAL_SIGNUP_URL = 'https://air.thalus.ai/auth/signup' as const
+
+/** Mirrors the API's support limits (`config/support.ts` in thalus-apps). */
+export const MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH = 4_000 as const
+export const MCP_AIR_SUPPORT_CREDIT_REQUEST_MAX = 100 as const
+export const MCP_AIR_SUPPORT_FEEDBACK_CATEGORIES = [
+  'bug',
+  'idea',
+  'praise',
+  'other',
+] as const satisfies ReadonlyArray<string>
+
 export type McpAirConfig = {
   readonly apiUrl: string
-  readonly apiKey: string
+  /**
+   * A fixed key for stdio. The hosted transport passes a resolver, because a
+   * session can start anonymous and gain a token when the user connects.
+   */
+  readonly apiKey: string | (() => string | undefined)
+}
+
+export const resolveApiUrl = (env: NodeJS.ProcessEnv = process.env): string => {
+  const rawUrl = env[MCP_AIR_API_URL_ENV]?.trim()
+  return rawUrl !== undefined && rawUrl.length > 0
+    ? rawUrl.replace(/\/$/, '')
+    : MCP_AIR_DEFAULT_API_URL
+}
+
+/** The key from the environment, if one is set. */
+export const envApiKey = (env: NodeJS.ProcessEnv = process.env): string | undefined => {
+  const apiKey = env[MCP_AIR_API_KEY_ENV]?.trim()
+  return apiKey !== undefined && apiKey.length > 0 ? apiKey : undefined
 }
 
 export const loadMcpAirConfig = (env: NodeJS.ProcessEnv = process.env): McpAirConfig => {
-  const apiKey = env[MCP_AIR_API_KEY_ENV]?.trim()
-  if (apiKey === undefined || apiKey.length === 0) {
+  const apiKey = envApiKey(env)
+  if (apiKey === undefined) {
     throw new Error(
       `${MCP_AIR_API_KEY_ENV} is required. Create a domain API key in the AIR portal and set it in your MCP config env or envFile.`,
     )
   }
 
-  const rawUrl = env[MCP_AIR_API_URL_ENV]?.trim()
-  const apiUrl =
-    rawUrl !== undefined && rawUrl.length > 0 ? rawUrl.replace(/\/$/, '') : MCP_AIR_DEFAULT_API_URL
-
-  return { apiUrl, apiKey }
+  return { apiUrl: resolveApiUrl(env), apiKey }
 }
 
 export const sleep = (ms: number): Promise<void> =>

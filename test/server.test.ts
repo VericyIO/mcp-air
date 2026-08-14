@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   MCP_AIR_EXPECTED_PROMPT_COUNT,
   MCP_AIR_EXPECTED_PROMPT_NAMES,
+  MCP_AIR_EXPECTED_RESOURCE_COUNT,
   MCP_AIR_EXPECTED_RESOURCE_TEMPLATE_COUNT,
   MCP_AIR_EXPECTED_RESOURCE_TEMPLATE_NAMES,
   MCP_AIR_EXPECTED_RESOURCE_TEMPLATE_URI_PATTERNS,
@@ -124,7 +125,7 @@ describe('createAirMcpServer', () => {
     const prompts = await client.listPrompts()
 
     expect(tools.tools).toHaveLength(MCP_AIR_EXPECTED_TOOL_COUNT)
-    expect(resources.resources).toHaveLength(0)
+    expect(resources.resources).toHaveLength(MCP_AIR_EXPECTED_RESOURCE_COUNT)
     expect(resourceTemplates.resourceTemplates).toHaveLength(
       MCP_AIR_EXPECTED_RESOURCE_TEMPLATE_COUNT,
     )

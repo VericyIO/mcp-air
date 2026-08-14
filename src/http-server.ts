@@ -15,10 +15,19 @@ import {
 import type { McpAirHttpRuntimeConfig } from "./http-config.js";
 import { RedisTaskStore } from "./redis-task-store.js";
 import { createAirMcpServer } from "./server.js";
+import { requestNeedsAuthentication } from "./surface.js";
+
+type SessionCredentialSlot = { apiKey: string | undefined };
 
 type SessionEntry = {
   readonly transport: StreamableHTTPServerTransport;
-  readonly identity: string;
+  /**
+   * Undefined until the user connects. A session may be created anonymously to
+   * call a public tool, then bind to an identity on the authenticated retry —
+   * but once bound it never switches to a different one.
+   */
+  identity: string | undefined;
+  readonly credentials: SessionCredentialSlot;
   lastSeenAt: number;
 };
 
@@ -100,7 +109,11 @@ export const createMcpAirHttpApp = async (
         config,
         authorizationHeader,
       );
-      if (credentials === undefined) {
+
+      // Lazy authentication: the gate reads the parsed JSON-RPC body before the
+      // SDK does, because anything the SDK handles comes back as a 200, and a
+      // 200 never produces the client's Connect card.
+      if (credentials === undefined && requestNeedsAuthentication(req.body)) {
         sendUnauthorized(res, authorizationHeader !== undefined);
         return;
       }
@@ -116,12 +129,18 @@ export const createMcpAirHttpApp = async (
         sessionId === undefined &&
         isInitializeRequest(req.body)
       ) {
+        // The slot is read on every upstream call, so a token that arrives on a
+        // later request in this session reaches the tools without a reconnect.
+        const sessionCredentials: SessionCredentialSlot = {
+          apiKey: credentials?.apiKey,
+        };
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (initializedSessionId) => {
             sessions.set(initializedSessionId, {
               transport,
-              identity: credentials.identity,
+              identity: credentials?.identity,
+              credentials: sessionCredentials,
               lastSeenAt: Date.now(),
             });
           },
@@ -131,14 +150,19 @@ export const createMcpAirHttpApp = async (
         });
 
         const server = createAirMcpServer(
-          { apiUrl: config.apiUrl, apiKey: credentials.apiKey },
+          { apiUrl: config.apiUrl, apiKey: () => sessionCredentials.apiKey },
           {
             surface: "remote",
             taskStore: sharedTaskStore ?? new InMemoryTaskStore(),
           },
         );
 
+        // `server.close()` closes the transport, which fires `onclose` again —
+        // an unguarded handler recurses until the stack overflows on shutdown.
+        let closing = false;
         transport.onclose = () => {
+          if (closing) return;
+          closing = true;
           void server.close();
         };
 
@@ -162,9 +186,15 @@ export const createMcpAirHttpApp = async (
         return;
       }
 
-      if (entry.identity !== credentials.identity) {
-        sendUnauthorized(res, true);
-        return;
+      // An anonymous session binds to the first identity it sees and keeps it;
+      // a token for a different identity must never reuse someone's session.
+      if (credentials !== undefined) {
+        if (entry.identity !== undefined && entry.identity !== credentials.identity) {
+          sendUnauthorized(res, true);
+          return;
+        }
+        entry.identity = credentials.identity;
+        entry.credentials.apiKey = credentials.apiKey;
       }
 
       entry.lastSeenAt = Date.now();

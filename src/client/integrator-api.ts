@@ -22,18 +22,39 @@ const buildUrl = (apiUrl: string, pathname: string, query?: RequestOptions['quer
   return url.toString()
 }
 
+/**
+ * A fixed key for stdio, or a resolver for the hosted transport, where a session
+ * may start anonymous and gain a token once the user connects.
+ */
+export type IntegratorApiCredential = string | (() => string | undefined)
+
 export class IntegratorApiClient {
   constructor(
     private readonly apiUrl: string,
-    private readonly apiKey: string,
+    private readonly apiKey: IntegratorApiCredential,
     private readonly requestTimeoutMs: number = MCP_AIR_REQUEST_TIMEOUT_MS,
   ) {}
 
+  /** The origin a stored credential belongs to, so a key is never reused elsewhere. */
+  apiUrlForStorage(): string {
+    return this.apiUrl
+  }
+
+  /** Undefined on the hosted transport before the user has connected. */
+  resolveApiKey(): string | undefined {
+    const key = typeof this.apiKey === 'function' ? this.apiKey() : this.apiKey
+    return key !== undefined && key.length > 0 ? key : undefined
+  }
+
   async request<T>(pathname: string, options: RequestOptions = {}): Promise<T> {
+    // A public endpoint must be called with no Authorization header at all. The
+    // transport's auth gate is what keeps protected tools from arriving here
+    // without a key.
+    const apiKey = this.resolveApiKey()
     const response = await fetch(buildUrl(this.apiUrl, pathname, options.query), {
       method: options.method ?? 'GET',
       headers: {
-        Authorization: `Bearer ${this.apiKey}`,
+        ...(apiKey === undefined ? {} : { Authorization: `Bearer ${apiKey}` }),
         Accept: 'application/json',
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
@@ -259,10 +280,83 @@ export class IntegratorApiClient {
       `/orgs/${encodeURIComponent(orgSlug)}/domains/${encodeURIComponent(domainSlug)}/portfolio`,
     )
   }
+
+  /** Unauthenticated by design: this is the path to a first credential. */
+  agentSignup(payload: {
+    readonly name: string
+    readonly email: string
+    readonly orgName: string
+    readonly client: { readonly name: string; readonly version: string }
+    readonly mcpAirVersion?: string
+  }) {
+    return this.request<Record<string, unknown>>('/onboarding/agent/signup', {
+      method: 'POST',
+      body: payload,
+    })
+  }
+
+  agentVerifyEmail(payload: {
+    readonly continuationToken: string
+    readonly otp: string
+    readonly termsVersion: string
+    readonly acceptTerms: boolean
+  }) {
+    return this.request<Record<string, unknown>>('/onboarding/agent/verify-email', {
+      method: 'POST',
+      body: payload,
+    })
+  }
+
+  creditBalance() {
+    return this.request<Record<string, unknown>>('/billing/credits')
+  }
+
+  creditPurchaseLink() {
+    return this.request<Record<string, unknown>>('/billing/credit-purchase-link', {
+      method: 'POST',
+      body: {},
+    })
+  }
+
+  requestCredits(payload: {
+    readonly credits: number
+    readonly reason: string
+    readonly contactEmail?: string
+    readonly context?: Record<string, unknown>
+  }) {
+    return this.request<Record<string, unknown>>('/support/credit-request', {
+      method: 'POST',
+      body: payload,
+    })
+  }
+
+  submitFeedback(payload: {
+    readonly category: string
+    readonly message: string
+    readonly contactEmail?: string
+    readonly context?: Record<string, unknown>
+  }) {
+    return this.request<Record<string, unknown>>('/support/feedback', {
+      method: 'POST',
+      body: payload,
+    })
+  }
+
+  /** No credential: the path for someone whose signup never completed. */
+  submitPublicFeedback(payload: {
+    readonly category: string
+    readonly message: string
+    readonly contactEmail: string
+  }) {
+    return this.request<Record<string, unknown>>('/support/feedback/public', {
+      method: 'POST',
+      body: payload,
+    })
+  }
 }
 
 export const createIntegratorApiClient = (
   apiUrl: string,
-  apiKey: string,
+  apiKey: IntegratorApiCredential,
   requestTimeoutMs: number = MCP_AIR_REQUEST_TIMEOUT_MS,
 ) => new IntegratorApiClient(apiUrl, apiKey, requestTimeoutMs)
