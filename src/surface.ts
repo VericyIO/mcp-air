@@ -1,3 +1,5 @@
+import { MCP_AIR_SIGNUP_FORM_URI } from './config.js'
+
 /** MCP tool surface — local stdio vs remote Streamable HTTP. */
 export type McpAirSurface = 'local' | 'remote'
 
@@ -37,15 +39,36 @@ const PUBLIC_TOOL_NAME_SET = new Set<string>(MCP_AIR_PUBLIC_TOOL_NAMES)
 
 type JsonRpcLike = {
   readonly method?: unknown
-  readonly params?: { readonly name?: unknown } | undefined
+  readonly id?: unknown
+  readonly result?: unknown
+  readonly error?: unknown
+  readonly params?: { readonly name?: unknown; readonly uri?: unknown } | undefined
 }
+
+/**
+ * A JSON-RPC response: an `id`, one of `result` or `error`, and no method.
+ *
+ * It carries no authority of its own — it can only complete a request this server
+ * already sent on this session — so the gate that admitted the request governs it.
+ * It must pass without a token or elicitation is unreachable before sign-in: the
+ * server asks for the person's details through `elicitation/create`, and the client
+ * replies with exactly this frame. Refuse it and the dialog opens, the person fills
+ * it in, and their answer is rejected.
+ *
+ * Deliberately strict: anything else with no method is still treated as protected.
+ */
+const isJsonRpcResponse = (message: JsonRpcLike): boolean =>
+  message.method === undefined &&
+  message.id !== undefined &&
+  message.id !== null &&
+  (message.result !== undefined || message.error !== undefined)
 
 const messageNeedsAuth = (message: JsonRpcLike): boolean => {
   const method = typeof message.method === 'string' ? message.method : undefined
   if (method === undefined) {
-    // A response or an unparseable frame carries no method to reason about;
-    // treat it as protected rather than guessing it is safe.
-    return true
+    // An unparseable frame carries no method to reason about; treat it as
+    // protected rather than guessing it is safe.
+    return !isJsonRpcResponse(message)
   }
 
   if (PUBLIC_JSON_RPC_METHODS.has(method)) {
@@ -55,6 +78,16 @@ const messageNeedsAuth = (message: JsonRpcLike): boolean => {
   if (method === 'tools/call') {
     const name = message.params?.name
     return typeof name !== 'string' || !PUBLIC_TOOL_NAME_SET.has(name)
+  }
+
+  // Gated by URI, exactly as `tools/call` is gated by name. Only the signup form
+  // is public: it is static HTML holding no account data, and a caller with no
+  // token has to fetch it to render the form that creates the account — the tool
+  // result carries the address, never the markup. Every `air://` resource stays
+  // protected, so an unauthenticated read still answers 401 and still produces
+  // the client's Connect card.
+  if (method === 'resources/read') {
+    return message.params?.uri !== MCP_AIR_SIGNUP_FORM_URI
   }
 
   return true

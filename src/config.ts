@@ -71,6 +71,13 @@ export const MCP_AIR_DEFAULT_LIST_LIMIT = 20 as const
 /** Where a client without MCP Apps sends the person instead. */
 export const MCP_AIR_PORTAL_SIGNUP_URL = 'https://air.thalus.ai/auth/signup' as const
 
+/**
+ * The MCP App that collects signup details. Here rather than beside the tool
+ * because the transport's public-request gate needs it too, and `surface.ts`
+ * importing `tools/account.ts` would close a cycle through `session.ts`.
+ */
+export const MCP_AIR_SIGNUP_FORM_URI = 'ui://air/signup-form.html' as const
+
 /** Mirrors the API's support limits (`config/support.ts` in thalus-apps). */
 export const MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH = 4_000 as const
 export const MCP_AIR_SUPPORT_CREDIT_REQUEST_MAX = 100 as const

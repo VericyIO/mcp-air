@@ -4,9 +4,8 @@ import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { IntegratorApiClient } from '../src/client/integrator-api.js'
-import { MCP_AIR_PORTAL_SIGNUP_URL } from '../src/config.js'
+import { MCP_AIR_PORTAL_SIGNUP_URL, MCP_AIR_SIGNUP_FORM_URI } from '../src/config.js'
 import { createAirMcpServer } from '../src/server.js'
-import { MCP_AIR_SIGNUP_FORM_URI } from '../src/tools/account.js'
 import { MCP_AIR_PUBLIC_TOOL_NAMES } from '../src/surface.js'
 
 const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui'

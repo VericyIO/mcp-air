@@ -14,12 +14,11 @@ import {
   MCP_AIR_PORTAL_SIGNUP_URL,
   MCP_AIR_SERVER_NAME,
   MCP_AIR_SERVER_VERSION,
+  MCP_AIR_SIGNUP_FORM_URI,
 } from '../config.js'
 import { toolJsonResult } from '../errors.js'
 import type { StdioSession } from '../session.js'
 import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
-
-export const MCP_AIR_SIGNUP_FORM_URI = 'ui://air/signup-form.html' as const
 
 const require = createRequire(import.meta.url)
 
