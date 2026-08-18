@@ -5,6 +5,7 @@ import {
   getUiCapability,
   registerAppResource,
   registerAppTool,
+  RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
@@ -83,24 +84,35 @@ const readSignupStart = (response: Record<string, unknown>): SignupStart | strin
 }
 
 const formHtml = (): string => `<!doctype html>
-<html><head><meta charset="utf-8" /><style>
-  :root { color-scheme: light dark; }
-  body { font: 14px/1.5 var(--font-sans, system-ui); color: var(--color-text-primary, #1a1a1a);
-    background: var(--color-background-primary, transparent); margin: 0; padding: 16px; }
+<html><head><meta charset="utf-8" />
+<!-- Both schemes, or the browser paints the iframe an opaque canvas backdrop when
+     its scheme differs from the host's, and Claude's light-dark() tokens misresolve. -->
+<meta name="color-scheme" content="light dark" /><style>
+  /* The host's frames are transparent so the conversation shows through. Painting a
+     background of our own turns the form into an embedded box instead. */
+  html, body { background: transparent; }
+  /* Brand accent. The design guidelines keep structural colour on host tokens and
+     allow your own for identity, so this is the one fixed pair: white on Thalus
+     purple is 8.9:1, and it holds in light and dark because both ends are fixed. */
+  :root { --air-brand: #782970; --air-brand-text: #ffffff; }
+  body { font: 14px/1.5 var(--font-sans, system-ui); color: var(--color-text-primary, #141413);
+    margin: 0; padding: 16px; }
   h1 { font-size: 15px; margin: 0 0 12px; }
-  label { display: block; margin: 10px 0 4px; color: var(--color-text-secondary, #555); }
+  label { display: block; margin: 10px 0 4px; color: var(--color-text-secondary, #3d3d3a); }
   input[type=text], input[type=email] { width: 100%; box-sizing: border-box; padding: 8px 10px;
-    border: 1px solid var(--color-border-primary, #ccc); border-radius: var(--border-radius-md, 6px);
-    background: var(--color-background-secondary, #fff); color: inherit; font: inherit; }
+    border: 1px solid var(--color-border-primary, #1f1e1d66); border-radius: var(--border-radius-md, 8px);
+    background: var(--color-background-secondary, #f5f4ed); color: inherit; font: inherit; }
   .row { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; }
   .row label { margin: 0; }
   button { margin-top: 14px; padding: 8px 14px; font: inherit; cursor: pointer; border: 0;
-    border-radius: var(--border-radius-md, 6px); background: var(--color-background-inverse, #1a1a1a);
-    color: var(--color-text-inverse, #fff); }
+    border-radius: var(--border-radius-md, 8px); background: var(--air-brand);
+    color: var(--air-brand-text); }
   button[disabled] { opacity: .5; cursor: default; }
-  .note { margin-top: 12px; color: var(--color-text-secondary, #555); }
-  .err { color: var(--color-text-danger, #c00); }
-  a { color: var(--color-text-accent, #06c); }
+  .note { margin-top: 12px; color: var(--color-text-secondary, #3d3d3a); }
+  .err { color: var(--color-text-danger, #7f2c28); }
+  /* color-text-accent is not a host token — it silently fell back to a fixed blue
+     that ignored dark mode. color-text-info is the real one. */
+  a { color: var(--color-text-info, #3266ad); }
   [hidden] { display: none !important; }
 </style></head><body>
   <section id="step-details">
@@ -224,7 +236,16 @@ export const registerAccountTools = (
   session?: StdioSession,
 ) => {
   registerAppResource(server, 'AIR signup form', MCP_AIR_SIGNUP_FORM_URI, {}, async (uri) => ({
-    contents: [{ uri: uri.href, mimeType: 'text/html;profile=mcp-app', text: formHtml() }],
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: RESOURCE_MIME_TYPE,
+        text: formHtml(),
+        // Claude web is borderless already; other hosts wrap a widget in their own
+        // bordered card, which double-frames a form that draws no frame of its own.
+        _meta: { ui: { prefersBorder: false } },
+      },
+    ],
   }))
 
   registerAppTool(
