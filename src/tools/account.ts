@@ -246,9 +246,9 @@ export const registerAccountTools = (
         return toolJsonResult({ status: 'form_open' })
       }
 
-      // Claude Code is not on the MCP Apps support matrix but does support
-      // elicitation, so without this branch the client most likely to be in
-      // front of a developer would fall back to the portal.
+      // For clients that do dialogs but not apps. Claude Code was the reason this
+      // branch exists and now renders the form instead, but the branch still
+      // carries every client that stops at elicitation.
       if (capabilities.elicitation !== undefined) {
         return await createAccountByElicitation(server, api, session)
       }
@@ -282,7 +282,8 @@ export const registerAccountTools = (
     'air_signup_send_code',
     {
       title: MCP_AIR_TOOL_TITLES.air_signup_send_code,
-      description: 'Signup form step one: send the verification code.',
+      description:
+        'Signup form step one: send the verification code. Submitted by the form itself, not by the assistant.',
       inputSchema: {
         name: z.string().min(1),
         email: z.string().email(),
@@ -315,7 +316,8 @@ export const registerAccountTools = (
     'air_signup_verify_code',
     {
       title: MCP_AIR_TOOL_TITLES.air_signup_verify_code,
-      description: 'Signup form step two: verify the code and create the account.',
+      description:
+        'Signup form step two: verify the code and create the account. Submitted by the form itself, not by the assistant.',
       inputSchema: {
         continuationToken: z.string().min(1),
         otp: z.string().min(1),
@@ -327,7 +329,13 @@ export const registerAccountTools = (
     },
     async ({ continuationToken, otp, termsVersion, acceptTerms }) => {
       if (acceptTerms !== true) {
-        return jsonError('Tick the terms checkbox in the form to create the account.')
+        // Reached when the assistant calls this step itself: the form's own button
+        // stays disabled until the box is ticked. Say so, and say that nothing is
+        // broken — the earlier wording read as "try again", and the assistant's
+        // idea of trying again was to start a second signup.
+        return jsonError(
+          'Nothing was created: the terms were not accepted. This step is submitted by the signup form, not by the assistant — do not call it, and do not start signup again. The form is already open; ask the person to tick the box and submit it.',
+        )
       }
 
       try {

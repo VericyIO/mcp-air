@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { IntegratorApiClient } from '../src/client/integrator-api.js'
@@ -60,6 +61,32 @@ const MCP_CALLER_CONTEXT = {
   client: { name: 'support-tools-test', version: '1.0.0' },
 }
 
+/**
+ * A client that shows dialogs, answering with what a person typed. The model
+ * cannot supply a contact address, so this is the only way one reaches the API.
+ */
+const connectWithElicitation = async (
+  api: IntegratorApiClient,
+  answer: Record<string, unknown>,
+) => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const server = createAirMcpServer(
+    { apiUrl: 'http://localhost:4001', apiKey: 'test-key' },
+    { api },
+  )
+  const client = new Client(
+    { name: 'support-tools-test', version: '1.0.0' },
+    { capabilities: { elicitation: {} } },
+  )
+  client.setRequestHandler(ElicitRequestSchema, async () => ({
+    action: 'accept',
+    content: answer,
+  }))
+  await server.connect(serverTransport)
+  await client.connect(clientTransport)
+  return client
+}
+
 const resultText = (result: Awaited<ReturnType<Client['callTool']>>): string => {
   const content = result.content as ReadonlyArray<{ type: string; text?: string }> | undefined
   return content?.map((part) => part.text ?? '').join('\n') ?? ''
@@ -87,20 +114,21 @@ describe('support tools', () => {
     expect(resultText(result)).toContain('sup_abc')
   })
 
-  it('falls back to the public path when there is no account yet', async () => {
+  it('falls back to the public path with the address the person typed', async () => {
     const submitFeedback = vi.fn()
     const submitPublicFeedback = vi.fn().mockResolvedValue({ received: true })
-    const client = await connectWithoutElicitation(
+    const client = await connectWithElicitation(
       stubApi({ apiKey: undefined, submitFeedback, submitPublicFeedback }),
-    )
-
-    await client.callTool({
-      name: 'air_submit_feedback',
-      arguments: {
+      {
         category: 'bug',
         message: 'signup failed for me',
         contactEmail: 'stranger@example.test',
       },
+    )
+
+    await client.callTool({
+      name: 'air_submit_feedback',
+      arguments: { category: 'bug', message: 'drafted by the model' },
     })
 
     expect(submitPublicFeedback).toHaveBeenCalledWith({
@@ -111,7 +139,9 @@ describe('support tools', () => {
     expect(submitFeedback).not.toHaveBeenCalled()
   })
 
-  it('asks for a contact email when unauthenticated feedback has none', async () => {
+  it('will not invent an address for unauthenticated feedback', async () => {
+    // No account to reply to and no dialog to ask through. Guessing an address
+    // would mail a stranger, so the portal takes it instead.
     const submitPublicFeedback = vi.fn()
     const client = await connectWithoutElicitation(
       stubApi({ apiKey: undefined, submitPublicFeedback }),
@@ -123,30 +153,68 @@ describe('support tools', () => {
     })
 
     expect(result.isError).toBe(true)
-    expect(resultText(result)).toContain('contact email')
+    expect(resultText(result)).toContain('air.thalus.ai')
     expect(submitPublicFeedback).not.toHaveBeenCalled()
   })
 
-  it('passes a credit request through with its contact email', async () => {
+  it('drops a contact address supplied by the model', async () => {
+    // The model recalling an address from the conversation is how a reply reaches
+    // someone unrelated to the org. The field is not on the tool, so an address it
+    // sends anyway never reaches the API and the owner receives the reply.
+    const submitFeedback = vi.fn().mockResolvedValue({ pid: 'sup_x', received: true })
+    const client = await connectWithoutElicitation(stubApi({ apiKey: 'air_key', submitFeedback }))
+
+    await client.callTool({
+      name: 'air_submit_feedback',
+      arguments: {
+        category: 'idea',
+        message: 'looks good',
+        contactEmail: 'someone-else@example.test',
+      },
+    })
+
+    expect(submitFeedback).toHaveBeenCalledWith({
+      category: 'idea',
+      message: 'looks good',
+      context: MCP_CALLER_CONTEXT,
+    })
+  })
+
+  it('sends a credit request with no address, leaving the reply to the owner', async () => {
     const requestCredits = vi.fn().mockResolvedValue({ pid: 'sup_credit', status: 'open' })
     const client = await connectWithoutElicitation(stubApi({ apiKey: 'air_key', requestCredits }))
 
     const result = await client.callTool({
       name: 'air_request_credits',
-      arguments: {
-        credits: 5,
-        reason: 'running a pilot',
-        contactEmail: 'owner@acme.test',
-      },
+      arguments: { credits: 5, reason: 'running a pilot' },
     })
 
     expect(requestCredits).toHaveBeenCalledWith({
       credits: 5,
       reason: 'running a pilot',
-      contactEmail: 'owner@acme.test',
       context: MCP_CALLER_CONTEXT,
     })
     expect(resultText(result)).toContain('sup_credit')
+  })
+
+  it('keeps a contact address the person redirected the reply to', async () => {
+    const requestCredits = vi.fn().mockResolvedValue({ pid: 'sup_credit', status: 'open' })
+    const client = await connectWithElicitation(
+      stubApi({ apiKey: 'air_key', requestCredits }),
+      { credits: 9, reason: 'pilot', contactEmail: 'finance@acme.test' },
+    )
+
+    await client.callTool({
+      name: 'air_request_credits',
+      arguments: { credits: 5, reason: 'running a pilot' },
+    })
+
+    expect(requestCredits).toHaveBeenCalledWith({
+      credits: 9,
+      reason: 'pilot',
+      contactEmail: 'finance@acme.test',
+      context: MCP_CALLER_CONTEXT,
+    })
   })
 
   it('names the MCP host on every authenticated write, for triage', async () => {

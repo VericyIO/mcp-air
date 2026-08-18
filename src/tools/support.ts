@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
 import {
+  MCP_AIR_PORTAL_SIGNUP_URL,
   MCP_AIR_SERVER_VERSION,
   MCP_AIR_SUPPORT_CREDIT_REQUEST_MAX,
   MCP_AIR_SUPPORT_FEEDBACK_CATEGORIES,
@@ -96,7 +97,6 @@ const confirmFeedback = async (
           type: 'string',
           title: 'Contact email (optional)',
           format: 'email',
-          ...(draft.contactEmail === undefined ? {} : { default: draft.contactEmail }),
         },
       },
       required: ['category', 'message'],
@@ -129,22 +129,26 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
       title: MCP_AIR_TOOL_TITLES.air_submit_feedback,
       description:
         'Send product feedback to Thalus. The text you write is shown to you for review before it is sent. Works without an AIR account — supply a contact email in that case, so Thalus can reply.',
+      // No `contactEmail`: an address is a fact about a person, not something to
+      // infer. A model asked for one offers whatever it read earlier in the
+      // conversation, which is how a reply reaches someone unrelated to the org.
+      // It comes from the person's own dialog, or from the account owner the API
+      // resolves server-side.
       inputSchema: {
         category: z.enum(MCP_AIR_SUPPORT_FEEDBACK_CATEGORIES),
         message: z.string().min(1).max(MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH),
-        contactEmail: z.string().email().optional(),
       },
       annotations: {
         ...writesToThalus,
         title: MCP_AIR_TOOL_TITLES.air_submit_feedback,
       },
     },
-    async ({ category, message, contactEmail }) => {
+    async ({ category, message }) => {
       try {
         const confirmed = await confirmFeedback(server, {
           category,
           message,
-          contactEmail,
+          contactEmail: undefined,
         })
         if (confirmed === 'declined') {
           return notSentResult('Your feedback')
@@ -154,12 +158,15 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
         // valuable feedback there is — so it goes to the public path instead.
         if (api.resolveApiKey() === undefined) {
           if (confirmed.contactEmail === undefined) {
+            // Only reachable on a client that cannot show a dialog: there is no
+            // account to reply to and no person to ask, and the model must not
+            // invent an address. The portal collects it properly.
             return {
               isError: true as const,
               content: [
                 {
                   type: 'text' as const,
-                  text: 'Add a contact email so Thalus can reply, then send the feedback again.',
+                  text: `This feedback needs a reply address and there is no account to take one from. Send it at ${MCP_AIR_PORTAL_SIGNUP_URL}, or create an AIR account first with air_create_account.`,
                 },
               ],
             }
@@ -198,22 +205,23 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
       title: MCP_AIR_TOOL_TITLES.air_request_credits,
       description:
         'Ask Thalus for more assessment credits. You review the amount and the reason before the request is sent, and Thalus replies by email. To start immediately instead, call air_get_credit_balance for the purchase link.',
+      // No `contactEmail`, for the reason given on `air_submit_feedback`. Left
+      // blank, the API replies to the organization owner.
       inputSchema: {
         credits: z.number().int().positive().max(MCP_AIR_SUPPORT_CREDIT_REQUEST_MAX),
         reason: z.string().min(1).max(MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH),
-        contactEmail: z.string().email().optional(),
       },
       annotations: {
         ...writesToThalus,
         title: MCP_AIR_TOOL_TITLES.air_request_credits,
       },
     },
-    async ({ credits, reason, contactEmail }) => {
+    async ({ credits, reason }) => {
       try {
         const confirmed = await confirmCreditRequest(server, {
           credits,
           reason,
-          contactEmail,
+          contactEmail: undefined,
         })
         if (confirmed === 'declined') {
           return notSentResult('Your credit request')
@@ -264,8 +272,9 @@ type ConfirmedCreditRequest = {
 }
 
 /**
- * A domain API key has no mailbox behind it, so the API answers 422 without a
- * contact email. Collect it in the same dialog rather than failing afterwards.
+ * Shows the person the request before it is sent. The contact address is offered
+ * but not demanded: the API replies to the organization owner when it is blank,
+ * and the field exists only so a person can redirect the reply somewhere else.
  */
 const confirmCreditRequest = async (
   server: McpServer,
@@ -296,12 +305,14 @@ const confirmCreditRequest = async (
         },
         contactEmail: {
           type: 'string',
-          title: 'Contact email',
+          title: 'Reply to a different address (optional)',
           format: 'email',
-          ...(draft.contactEmail === undefined ? {} : { default: draft.contactEmail }),
         },
       },
-      required: ['credits', 'reason', 'contactEmail'],
+      // Blank is the good default: the API replies to the organization owner. It
+      // was required here while the API answered 422 without it, which pushed the
+      // job onto the model.
+      required: ['credits', 'reason'],
     },
   })
 
