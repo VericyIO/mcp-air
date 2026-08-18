@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { IntegratorApiClient } from '../src/client/integrator-api.js'
+import { MCP_AIR_SERVER_VERSION } from '../src/config.js'
 import {
   IntegratorApiError,
   formatIntegratorApiError,
@@ -49,6 +50,16 @@ const connectWithoutElicitation = async (api: IntegratorApiClient) => {
   return client
 }
 
+/**
+ * What the support inbox needs to tell an in-chat request from a portal one.
+ * `client` is the connecting test client, since that is the MCP host here.
+ */
+const MCP_CALLER_CONTEXT = {
+  source: 'mcp',
+  mcpAirVersion: MCP_AIR_SERVER_VERSION,
+  client: { name: 'support-tools-test', version: '1.0.0' },
+}
+
 const resultText = (result: Awaited<ReturnType<Client['callTool']>>): string => {
   const content = result.content as ReadonlyArray<{ type: string; text?: string }> | undefined
   return content?.map((part) => part.text ?? '').join('\n') ?? ''
@@ -70,6 +81,7 @@ describe('support tools', () => {
     expect(submitFeedback).toHaveBeenCalledWith({
       category: 'bug',
       message: 'the tier rationale was vague',
+      context: MCP_CALLER_CONTEXT,
     })
     expect(submitPublicFeedback).not.toHaveBeenCalled()
     expect(resultText(result)).toContain('sup_abc')
@@ -132,8 +144,36 @@ describe('support tools', () => {
       credits: 5,
       reason: 'running a pilot',
       contactEmail: 'owner@acme.test',
+      context: MCP_CALLER_CONTEXT,
     })
     expect(resultText(result)).toContain('sup_credit')
+  })
+
+  it('names the MCP host on every authenticated write, for triage', async () => {
+    // Without this the internal notification reads "Received from unknown".
+    const submitFeedback = vi.fn().mockResolvedValue({ pid: 'sup_ctx', received: true })
+    const requestCredits = vi.fn().mockResolvedValue({ pid: 'sup_ctx2', status: 'open' })
+    const client = await connectWithoutElicitation(
+      stubApi({ apiKey: 'air_key', submitFeedback, requestCredits }),
+    )
+
+    await client.callTool({
+      name: 'air_submit_feedback',
+      arguments: { category: 'idea', message: 'from an agent' },
+    })
+    await client.callTool({
+      name: 'air_request_credits',
+      arguments: { credits: 2, reason: 'from an agent', contactEmail: 'a@b.test' },
+    })
+
+    for (const spy of [submitFeedback, requestCredits]) {
+      const { context } = spy.mock.calls[0]?.[0] as { context: Record<string, unknown> }
+      expect(context.source).toBe('mcp')
+      expect(context.mcpAirVersion).toBe(MCP_AIR_SERVER_VERSION)
+      // The host the person is using, not this package — the two fields must
+      // not collapse into the same string.
+      expect(context.client).toEqual({ name: 'support-tools-test', version: '1.0.0' })
+    }
   })
 
   it('reads the credit balance', async () => {

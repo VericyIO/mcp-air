@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
 import {
+  MCP_AIR_SERVER_VERSION,
   MCP_AIR_SUPPORT_CREDIT_REQUEST_MAX,
   MCP_AIR_SUPPORT_FEEDBACK_CATEGORIES,
   MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH,
@@ -34,6 +35,31 @@ type ConfirmedFeedback = {
 
 const supportsElicitation = (server: McpServer): boolean =>
   server.server.getClientCapabilities()?.elicitation !== undefined
+
+/**
+ * Triage context for the AIR support inbox. Without it the internal notification
+ * reads "Received from unknown", so whoever triages cannot tell an in-chat
+ * request from one filed in the portal — which is the one thing this surface
+ * exists to make visible.
+ *
+ * `client` is the MCP host the person is actually using (Claude Code, Cursor);
+ * `mcpAirVersion` is this package. They stay separate on purpose — two fields
+ * carrying the same string would tell the reader nothing.
+ *
+ * The API declares both `name` and `version` non-empty, so a host that
+ * identifies itself only partly is left out rather than sent and rejected.
+ */
+const callerContext = (server: McpServer) => {
+  const host = server.server.getClientVersion()
+  const named =
+    host !== undefined && host.name.length > 0 && (host.version ?? '').length > 0
+
+  return {
+    source: 'mcp' as const,
+    mcpAirVersion: MCP_AIR_SERVER_VERSION,
+    ...(named ? { client: { name: host.name, version: host.version } } : {}),
+  }
+}
 
 /**
  * The message is the user's words going to Thalus, so the human sees the exact
@@ -154,6 +180,7 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
           await api.submitFeedback({
             category: confirmed.category,
             message: confirmed.message,
+            context: callerContext(server),
             ...(confirmed.contactEmail === undefined
               ? {}
               : { contactEmail: confirmed.contactEmail }),
@@ -196,6 +223,7 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
           await api.requestCredits({
             credits: confirmed.credits,
             reason: confirmed.reason,
+            context: callerContext(server),
             ...(confirmed.contactEmail === undefined
               ? {}
               : { contactEmail: confirmed.contactEmail }),
