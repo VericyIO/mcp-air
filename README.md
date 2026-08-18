@@ -121,7 +121,7 @@ End-user setup: [Remote MCP server (OAuth)](https://air.thalus.ai/docs/guides/mc
 | Tool                                     | What it does                                                      |
 | ---------------------------------------- | ------------------------------------------------------------------- |
 | `air_create_account`                     | Collects name, email, organization, code and terms — in a form or a dialog |
-| `air_submit_feedback`                    | Sends feedback to Thalus — include a contact email so they can reply |
+| `air_submit_feedback`                    | Sends feedback to Thalus — you are asked for a reply address when you have no account |
 | `air_signup_send_code`, `air_signup_verify_code` | The form's own callbacks; hidden from the model                |
 | `air_sign_out`                           | stdio only; clears the stored credential                           |
 
@@ -136,14 +136,16 @@ Creating an account in chat:
 
 Your organization starts on the Free plan with one assessment credit per 30 days. Use `air_get_credit_balance` to see where you stand and `air_request_credits` to ask for more.
 
+Neither feedback nor a credit request asks the assistant for an email address. Thalus replies to the **organization owner**, or to an address you type yourself in the confirmation dialog. Only the unauthenticated case needs one from you, because there is no account to reply to.
+
 ### What your client supports
 
 `air_create_account` uses the richest input your client offers:
 
 | Client capability                            | What happens                                                           |
 | -------------------------------------------- | ------------------------------------------------------------------------ |
-| [MCP Apps](https://modelcontextprotocol.io/) | A form renders in the conversation. Fields never reach the model at all. |
-| Elicitation only (**Claude Code**)           | Two dialogs: details, then the code and the terms checkbox.              |
+| [MCP Apps](https://modelcontextprotocol.io/) (**Claude Code**, Claude, VS Code) | A form renders in the conversation. Fields never reach the model at all. |
+| Elicitation only                             | Two dialogs: details, then the code and the terms checkbox.              |
 | Neither                                      | The portal signup link, and it stops. It will not ask the model for your details. |
 
 ## Credentials

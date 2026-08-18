@@ -128,7 +128,7 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
     {
       title: MCP_AIR_TOOL_TITLES.air_submit_feedback,
       description:
-        'Send product feedback to Thalus. The text you write is shown to you for review before it is sent. Works without an AIR account — supply a contact email in that case, so Thalus can reply.',
+        'Send product feedback to Thalus. The person reviews the text before it is sent. A reply goes to the organization owner, or to an address the person gives. Works without an AIR account, where the person is asked for one.',
       // No `contactEmail`: an address is a fact about a person, not something to
       // infer. A model asked for one offers whatever it read earlier in the
       // conversation, which is how a reply reaches someone unrelated to the org.
@@ -204,7 +204,7 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
     {
       title: MCP_AIR_TOOL_TITLES.air_request_credits,
       description:
-        'Ask Thalus for more assessment credits. You review the amount and the reason before the request is sent, and Thalus replies by email. To start immediately instead, call air_get_credit_balance for the purchase link.',
+        'Ask Thalus for more assessment credits. The person reviews the amount and the reason before the request is sent, and Thalus replies by email to the organization owner. To buy credits immediately instead, call air_get_credit_balance for the purchase link.',
       // No `contactEmail`, for the reason given on `air_submit_feedback`. Left
       // blank, the API replies to the organization owner.
       inputSchema: {
@@ -286,7 +286,7 @@ const confirmCreditRequest = async (
 
   const result = await server.server.elicitInput({
     message:
-      'Review the credit request before it is sent to Thalus. A contact email is required so Thalus can reply.',
+      'Review the credit request before it is sent to Thalus. The reply goes to the organization owner unless you name another address.',
     requestedSchema: {
       type: 'object',
       properties: {
