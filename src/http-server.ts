@@ -186,6 +186,15 @@ export const createMcpAirHttpApp = async (
         return;
       }
 
+      // Lazy authentication is for a session that has not authenticated yet. Once
+      // one has bound an identity, its session id alone must stop being enough:
+      // a public tool would otherwise run against the bound credential for anyone
+      // who learned the id, and the record it writes would name that organization.
+      if (credentials === undefined && entry.identity !== undefined) {
+        sendUnauthorized(res, false);
+        return;
+      }
+
       // An anonymous session binds to the first identity it sees and keeps it;
       // a token for a different identity must never reuse someone's session.
       if (credentials !== undefined) {
