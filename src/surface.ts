@@ -23,11 +23,12 @@ export const MCP_AIR_PUBLIC_TOOL_NAMES = [
  * JSON-RPC methods that never need a token: the handshake itself, and listing
  * what is on offer. A client must be able to connect and see the tools before
  * it can be asked to authenticate for one of them.
+ *
+ * Client notifications are handled by {@link isNotification} rather than listed
+ * here, so a new one does not have to be remembered.
  */
 const PUBLIC_JSON_RPC_METHODS = new Set([
   'initialize',
-  'notifications/initialized',
-  'notifications/cancelled',
   'ping',
   'tools/list',
   'prompts/list',
@@ -44,6 +45,25 @@ type JsonRpcLike = {
   readonly error?: unknown
   readonly params?: { readonly name?: unknown; readonly uri?: unknown } | undefined
 }
+
+/**
+ * A client notification: a `notifications/*` method and no `id`.
+ *
+ * It expects no reply, so answering 401 is wrong on its own terms — and that
+ * challenge is exactly what tells a host to show its Connect card, so a client
+ * that merely changed its workspace roots would be asked to sign in.
+ *
+ * None of them reach anything protected: `cancelled` stops a request that was
+ * already gated, `progress` is informational, `roots/list_changed` only invites
+ * this server to re-read roots from the client, and `initialized` finishes the
+ * handshake. The spec makes `roots/list_changed` mandatory for any client that
+ * declares the capability, so it is traffic we will certainly be sent.
+ *
+ * The missing `id` matters: it is what separates a notification from a request
+ * wearing a notification's name.
+ */
+const isNotification = (message: JsonRpcLike, method: string): boolean =>
+  method.startsWith('notifications/') && message.id === undefined
 
 /**
  * A JSON-RPC response: an `id`, one of `result` or `error`, and no method.
@@ -71,7 +91,7 @@ const messageNeedsAuth = (message: JsonRpcLike): boolean => {
     return !isJsonRpcResponse(message)
   }
 
-  if (PUBLIC_JSON_RPC_METHODS.has(method)) {
+  if (PUBLIC_JSON_RPC_METHODS.has(method) || isNotification(message, method)) {
     return false
   }
 

@@ -141,6 +141,24 @@ describe('requestNeedsAuthentication', () => {
     ).toBe(true)
   })
 
+  it('lets every client notification through', () => {
+    // A notification expects no reply, and the 401 challenge is what makes a host
+    // show its Connect card. `roots/list_changed` is mandatory for any client that
+    // declares the capability, so this arrives whether or not anyone signed in.
+    for (const method of [
+      'notifications/initialized',
+      'notifications/cancelled',
+      'notifications/progress',
+      'notifications/roots/list_changed',
+    ]) {
+      expect(requestNeedsAuthentication({ jsonrpc: '2.0', method })).toBe(false)
+    }
+    // A request wearing a notification's name is still a request.
+    expect(
+      requestNeedsAuthentication({ jsonrpc: '2.0', id: 1, method: 'notifications/roots/list' }),
+    ).toBe(true)
+  })
+
   it('lets a client answer a request this server sent it', () => {
     // Elicitation is a server-initiated request; the reply is a response frame.
     expect(
@@ -250,6 +268,21 @@ describe('hosted transport lazy authentication', () => {
 
       // The person types their details into the dialog; rejecting the reply
       // would strand them mid-signup.
+      expect(response.status).not.toBe(401)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('does not challenge a roots change on an unauthenticated session', async () => {
+    const server = await startTestServer()
+    try {
+      const sessionId = await anonymousSession(server.url)
+      const response = await postInSession(server.url, sessionId, {
+        jsonrpc: '2.0',
+        method: 'notifications/roots/list_changed',
+      })
+
       expect(response.status).not.toBe(401)
     } finally {
       await server.stop()
