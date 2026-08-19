@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest'
 
 import { MCP_AIR_SIGNUP_FORM_URI } from '../src/config.js'
 import { createMcpAirHttpApp } from '../src/http-server.js'
-import type { McpAirHttpRuntimeConfig } from '../src/http-config.js'
+import {
+  loadMcpAirHttpRuntimeConfig,
+  MCP_AIR_OAUTH_RESOURCE_IDENTIFIER,
+  type McpAirHttpRuntimeConfig,
+} from '../src/http-config.js'
 import { MCP_AIR_PUBLIC_TOOL_NAMES, requestNeedsAuthentication } from '../src/surface.js'
 
 const testConfig: McpAirHttpRuntimeConfig = {
@@ -188,6 +192,34 @@ describe('requestNeedsAuthentication', () => {
         method: 'tools/call',
       }),
     ).toBe(true)
+  })
+})
+
+describe('deployment identity in the OAuth challenge', () => {
+  it('points resource metadata at the API this deployment talks to', async () => {
+    // Pinned to production, a dev deployment sends half its OAuth discovery to
+    // production and no flow against another environment can complete.
+    const server = await startTestServer()
+    try {
+      const response = await post(server.url, toolCall('air_list_domains'))
+      const challenge = response.headers.get('www-authenticate') ?? ''
+
+      expect(challenge).toContain(
+        `resource_metadata="${testConfig.apiUrl}/.well-known/oauth-protected-resource"`,
+      )
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('takes the audience from the environment, defaulting to production', () => {
+    expect(
+      loadMcpAirHttpRuntimeConfig({ MCP_OAUTH_RESOURCE: 'https://mcp-dev.air.thalus.ai/mcp/' })
+        .mcpResourceIdentifier,
+    ).toBe('https://mcp-dev.air.thalus.ai/mcp')
+    expect(loadMcpAirHttpRuntimeConfig({}).mcpResourceIdentifier).toBe(
+      MCP_AIR_OAUTH_RESOURCE_IDENTIFIER,
+    )
   })
 })
 

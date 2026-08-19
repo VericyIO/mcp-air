@@ -101,12 +101,24 @@ Hosted endpoint: `https://mcp.air.thalus.ai/mcp`.
 ```bash
 # After build
 AIR_API_URL=https://api.air.thalus.ai \
+MCP_OAUTH_RESOURCE=https://mcp.air.thalus.ai/mcp \
 REDIS_URL=redis://127.0.0.1:6379 \
 OAUTH_INTROSPECT_CLIENT_ID=your-resource-server-client-id \
 OAUTH_INTROSPECT_CLIENT_SECRET=your-resource-server-client-secret \
 MCP_HTTP_PORT=4104 \
 node dist/build/http.mjs
 ```
+
+Two variables carry this deployment's identity, and both default to production:
+
+| Variable             | What it sets                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `AIR_API_URL`        | The upstream API **and** the protected-resource metadata origin advertised in the `401`         |
+| `MCP_OAUTH_RESOURCE` | This server's own public URL, which access tokens must name as their audience                  |
+
+Set both when running anywhere other than production. Left at their defaults, a
+staging or dev server sends clients to production for OAuth discovery and then
+rejects the tokens they come back with, because the audience never matches.
 
 Deploy notes, Angie, and systemd units live in [`infra/`](./infra/).
 

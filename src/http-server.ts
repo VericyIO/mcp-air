@@ -44,10 +44,17 @@ const jsonRpcError = (status: number, message: string) => ({
   id: null,
 });
 
-const sendUnauthorized = (res: Response, invalidToken = false) => {
+const sendUnauthorized = (
+  res: Response,
+  config: McpAirHttpRuntimeConfig,
+  invalidToken = false,
+) => {
   res
     .status(401)
-    .set("WWW-Authenticate", unauthorizedWwwAuthenticateHeader(invalidToken))
+    .set(
+      "WWW-Authenticate",
+      unauthorizedWwwAuthenticateHeader(config, invalidToken),
+    )
     .json(jsonRpcError(401, "Unauthorized"));
 };
 
@@ -114,7 +121,7 @@ export const createMcpAirHttpApp = async (
       // SDK does, because anything the SDK handles comes back as a 200, and a
       // 200 never produces the client's Connect card.
       if (credentials === undefined && requestNeedsAuthentication(req.body)) {
-        sendUnauthorized(res, authorizationHeader !== undefined);
+        sendUnauthorized(res, config, authorizationHeader !== undefined);
         return;
       }
 
@@ -191,7 +198,7 @@ export const createMcpAirHttpApp = async (
       // a public tool would otherwise run against the bound credential for anyone
       // who learned the id, and the record it writes would name that organization.
       if (credentials === undefined && entry.identity !== undefined) {
-        sendUnauthorized(res, false);
+        sendUnauthorized(res, config, false);
         return;
       }
 
@@ -199,7 +206,7 @@ export const createMcpAirHttpApp = async (
       // a token for a different identity must never reuse someone's session.
       if (credentials !== undefined) {
         if (entry.identity !== undefined && entry.identity !== credentials.identity) {
-          sendUnauthorized(res, true);
+          sendUnauthorized(res, config, true);
           return;
         }
         entry.identity = credentials.identity;

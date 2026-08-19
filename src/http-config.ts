@@ -1,5 +1,4 @@
 import { MCP_AIR_API_URL_ENV, MCP_AIR_DEFAULT_API_URL } from "./config.js";
-import { MCP_AIR_PUBLIC_API_ORIGIN } from "./constants.js";
 
 /** Environment variable for HTTP bind host. */
 export const MCP_AIR_HTTP_HOST_ENV = "MCP_HTTP_HOST" as const;
@@ -30,11 +29,28 @@ export const MCP_AIR_OAUTH_INTROSPECT_CLIENT_SECRET_ENV =
 /** Optional Redis URL for MCP task state on the HTTP host. */
 export const MCP_AIR_REDIS_URL_ENV = "REDIS_URL" as const;
 
-/** Protected-resource metadata URL advertised in 401 responses. */
-export const MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL =
-  `${MCP_AIR_PUBLIC_API_ORIGIN}/.well-known/oauth-protected-resource` as const;
+/** Environment variable for this deployment's own public MCP URL. */
+export const MCP_AIR_OAUTH_RESOURCE_ENV = "MCP_OAUTH_RESOURCE" as const;
 
-/** Audience required on OAuth access tokens accepted by the hosted MCP resource. */
+/**
+ * Protected-resource metadata URL advertised in 401 responses.
+ *
+ * Derived from the API this deployment actually talks to rather than pinned to
+ * production, because the AIR API is both the upstream and the metadata host, and
+ * two sources of truth for one origin is how a dev deployment ends up pointing
+ * half of its OAuth discovery at production.
+ */
+export const protectedResourceMetadataUrl = (apiUrl: string): string =>
+  `${apiUrl.replace(/\/$/, "")}/.well-known/oauth-protected-resource`;
+
+/**
+ * Audience required on OAuth access tokens accepted by the hosted MCP resource:
+ * this deployment's own public URL, which a token is minted for.
+ *
+ * Overridable because it identifies a deployment, not the product. Hardcoded, a
+ * server running anywhere but production demands production-audience tokens and
+ * no OAuth flow against another environment can succeed.
+ */
 export const MCP_AIR_OAUTH_RESOURCE_IDENTIFIER =
   "https://mcp.air.thalus.ai/mcp" as const;
 
@@ -90,12 +106,18 @@ export const loadMcpAirHttpRuntimeConfig = (
     env[MCP_AIR_OAUTH_INTROSPECT_CLIENT_SECRET_ENV]?.trim();
   const redisUrl = env[MCP_AIR_REDIS_URL_ENV]?.trim();
 
+  const rawResource = env[MCP_AIR_OAUTH_RESOURCE_ENV]?.trim();
+  const resourceIdentifier =
+    rawResource !== undefined && rawResource.length > 0
+      ? rawResource.replace(/\/$/, "")
+      : MCP_AIR_OAUTH_RESOURCE_IDENTIFIER;
+
   return {
     apiUrl,
     httpHost,
     httpPort,
     httpPath,
-    mcpResourceIdentifier: MCP_AIR_OAUTH_RESOURCE_IDENTIFIER,
+    mcpResourceIdentifier: resourceIdentifier,
     ...(oauthIntrospectClientId !== undefined &&
     oauthIntrospectClientId.length > 0
       ? { oauthIntrospectClientId }

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
 import {
-  MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL,
   MCP_AIR_OAUTH_REQUIRED_SCOPE,
+  protectedResourceMetadataUrl,
 } from "./http-config.js";
 import type { McpAirHttpRuntimeConfig } from "./http-config.js";
 
@@ -165,8 +165,11 @@ export const resolveMcpCredentials = async (
  * scope the protected-resource metadata lists, so users would consent to both presets.
  */
 export const unauthorizedWwwAuthenticateHeader = (
+  config: McpAirHttpRuntimeConfig,
   invalidToken = false,
 ): string =>
-  `Bearer realm="AIR MCP", resource_metadata="${MCP_AIR_OAUTH_PROTECTED_RESOURCE_METADATA_URL}", scope="${MCP_AIR_OAUTH_REQUIRED_SCOPE}"${
+  `Bearer realm="AIR MCP", resource_metadata="${protectedResourceMetadataUrl(
+    config.apiUrl,
+  )}", scope="${MCP_AIR_OAUTH_REQUIRED_SCOPE}"${
     invalidToken ? ', error="invalid_token"' : ""
   }`;
