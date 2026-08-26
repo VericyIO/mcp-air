@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { IntegratorApiClient } from '../src/client/integrator-api.js'
 import { MCP_AIR_PORTAL_SIGNUP_URL, MCP_AIR_SIGNUP_FORM_URI } from '../src/config.js'
+import { IntegratorApiError } from '../src/errors.js'
 import { createAirMcpServer } from '../src/server.js'
 import { MCP_AIR_PUBLIC_TOOL_NAMES } from '../src/surface.js'
 
@@ -63,6 +64,17 @@ describe('signup form resource', () => {
     expect(html).toContain('callServerTool')
     // No bundler runs, so a bare import inside the iframe would simply fail.
     expect(html).not.toMatch(/^\s*import\s+[^(]*from\s+['"][a-z@]/m)
+  })
+
+  it('detects a failure body even when the tool call itself succeeded', async () => {
+    // The server may answer an expected failure with isError: false — see
+    // signup-callback tests below — so the form must not rely on isError alone.
+    const client = await connect(stubApi(), true)
+
+    const resource = await client.readResource({ uri: MCP_AIR_SIGNUP_FORM_URI })
+    const html = (resource.contents[0] as { text?: string }).text ?? ''
+
+    expect(html).toContain("parsed?.error !== undefined")
   })
 
   it('collects the terms tick in the form and nowhere else', async () => {
@@ -170,6 +182,11 @@ describe('signup callbacks', () => {
   })
 
   it('refuses to create the account when the terms were not ticked', async () => {
+    // isError: false on purpose. `visibility: ['app']` does not stop a generic
+    // caller from reaching this tool, and a stranger supplying acceptTerms: false
+    // is expected input, not a server fault a reviewer's functional test should
+    // read as broken. The real form still detects the failure: its call() helper
+    // checks the body for an `error` field, not only isError.
     const agentVerifyEmail = vi.fn()
     const client = await connect(stubApi({ agentVerifyEmail }), true)
 
@@ -183,9 +200,51 @@ describe('signup callbacks', () => {
       },
     })
 
-    expect(result.isError).toBe(true)
+    expect(result.isError).toBe(false)
     expect(resultText(result)).toContain('terms')
     expect(agentVerifyEmail).not.toHaveBeenCalled()
+  })
+
+  it('does not treat an expired signup session as a server error', async () => {
+    // The only way to get a real continuation token is to complete step one
+    // first — no "valid parameters" a functional test supplies can ever satisfy
+    // this precondition, so it must not read as the tool being broken.
+    const agentVerifyEmail = vi
+      .fn()
+      .mockRejectedValue(new IntegratorApiError(401, JSON.stringify({ message: 'Invalid or expired signup session' })))
+    const client = await connect(stubApi({ agentVerifyEmail }), true)
+
+    const result = await client.callTool({
+      name: 'air_signup_verify_code',
+      arguments: {
+        continuationToken: 'tok_fictitious',
+        otp: '000000',
+        termsVersion: '2026-06-15',
+        acceptTerms: true,
+      },
+    })
+
+    expect(result.isError).toBe(false)
+    expect(resultText(result)).toContain('Invalid or expired signup session')
+  })
+
+  it('still surfaces a genuine service failure as isError', async () => {
+    const agentVerifyEmail = vi
+      .fn()
+      .mockRejectedValue(new IntegratorApiError(503, JSON.stringify({ message: 'Account creation is unavailable' })))
+    const client = await connect(stubApi({ agentVerifyEmail }), true)
+
+    const result = await client.callTool({
+      name: 'air_signup_verify_code',
+      arguments: {
+        continuationToken: 'tok_x',
+        otp: '123456',
+        termsVersion: '2026-06-15',
+        acceptTerms: true,
+      },
+    })
+
+    expect(result.isError).toBe(true)
   })
 
   it('stops with the portal link when the API reports no terms version', async () => {

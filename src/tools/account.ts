@@ -17,7 +17,7 @@ import {
   MCP_AIR_SERVER_VERSION,
   MCP_AIR_SIGNUP_FORM_URI,
 } from '../config.js'
-import { toolJsonResult } from '../errors.js'
+import { IntegratorApiError, toolJsonResult } from '../errors.js'
 import type { StdioSession } from '../session.js'
 import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
@@ -36,6 +36,62 @@ const jsonError = (message: string) => ({
   isError: true as const,
   content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }],
 })
+
+/**
+ * Same body as `jsonError`, `isError: false`.
+ *
+ * `visibility: ['app']` is a client-side hint, not a server-side guarantee — the
+ * two signup callback tools stay in `tools/list` for any caller, including a
+ * generic functional test that supplies schema-valid but fictitious values (an
+ * unknown continuation token, an unticked terms box). Nothing in that shape can
+ * ever succeed, because it requires state — a real emailed code — that no
+ * "valid parameters" alone can produce, but it is not a broken server either.
+ *
+ * The form's own `call()` helper still detects failure here: it checks for an
+ * `error` field in the body, not only `isError`. Real users are unaffected —
+ * `isError` stays true for anything that reflects an actual system failure
+ * (rate limited, the API unavailable) rather than a caller supplying state that
+ * was never going to resolve.
+ */
+const expectedFailureResult = (message: string) => ({
+  isError: false as const,
+  content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }],
+})
+
+/**
+ * A 4xx from the API reflects the caller's input — an expired token, a wrong
+ * code, an email already registered — not a system failure. 429 stays a hard
+ * error: being rate limited is not something "valid parameters" caused.
+ */
+const isCallerStateError = (error: unknown): boolean =>
+  error instanceof IntegratorApiError && error.status >= 400 && error.status < 500 && error.status !== 429
+
+/**
+ * `IntegratorApiError.message` runs every status through `formatIntegratorApiError`,
+ * which is written for the authenticated tools: a 401 there always reads "Verify
+ * AIR_API_KEY is valid" — wrong here, since these two callbacks are unauthenticated
+ * by design and a 401 means the continuation token or code did not resolve, not a
+ * bad key. The onboarding API's own error body already carries the accurate
+ * sentence (`{"message": "Invalid or expired signup session"}`); prefer that.
+ */
+const signupCallbackMessage = (error: unknown): string => {
+  if (error instanceof IntegratorApiError) {
+    try {
+      const body = JSON.parse(error.body) as { readonly message?: unknown }
+      if (typeof body.message === 'string' && body.message.length > 0) {
+        return body.message
+      }
+    } catch {
+      // Not JSON, or no usable message — fall through to the generic text below.
+    }
+  }
+  return error instanceof Error ? error.message : String(error)
+}
+
+const signupCallbackError = (error: unknown) => {
+  const message = signupCallbackMessage(error)
+  return isCallerStateError(error) ? expectedFailureResult(message) : jsonError(message)
+}
 
 type SignupStart = {
   readonly continuationToken: string
@@ -151,7 +207,13 @@ ${appRuntime()}
     const call = async (name, args) => {
       const r = await app.callServerTool({ name, arguments: args })
       const parsed = JSON.parse(r?.content?.find((c) => c.type === 'text')?.text ?? '{}')
-      if (r?.isError) throw new Error(parsed.error ?? 'That did not work. Try again.')
+      // Some expected failures — an expired session, a wrong code — come back with
+      // isError: false so a generic caller sees a plain, successful response rather
+      // than an error it could never have avoided. The body still carries the
+      // failure, so check for that instead of relying on isError alone.
+      if (r?.isError || parsed?.error !== undefined) {
+        throw new Error(parsed.error ?? 'That did not work. Try again.')
+      }
       return parsed
     }
 
@@ -327,7 +389,7 @@ export const registerAccountTools = (
 
         return typeof started === 'string' ? jsonError(started) : toolJsonResult(started)
       } catch (error) {
-        return jsonError(error instanceof Error ? error.message : String(error))
+        return signupCallbackError(error)
       }
     },
   )
@@ -353,8 +415,10 @@ export const registerAccountTools = (
         // Reached when the assistant calls this step itself: the form's own button
         // stays disabled until the box is ticked. Say so, and say that nothing is
         // broken — the earlier wording read as "try again", and the assistant's
-        // idea of trying again was to start a second signup.
-        return jsonError(
+        // idea of trying again was to start a second signup. Not isError: a
+        // stranger calling this with acceptTerms: false is expected input, not a
+        // server fault — see `expectedFailureResult`.
+        return expectedFailureResult(
           'Nothing was created: the terms were not accepted. This step is submitted by the signup form, not by the assistant — do not call it, and do not start signup again. The form is already open; ask the person to tick the box and submit it.',
         )
       }
@@ -369,7 +433,7 @@ export const registerAccountTools = (
 
         return toolJsonResult(storeIfPossible(created, session, api, 'form'))
       } catch (error) {
-        return jsonError(error instanceof Error ? error.message : String(error))
+        return signupCallbackError(error)
       }
     },
   )
