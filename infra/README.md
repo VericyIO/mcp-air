@@ -12,7 +12,8 @@ Dedicated server for `@thalus-ai/mcp-air` Streamable HTTP (`mcp-server-air-http`
 6. Install `infra/angie/mcp-air.conf`, reload Angie.
 7. Verify:
    - `curl -fsS https://mcp.air.thalus.ai/health` → `ok`
-   - Unauthenticated MCP initialize → `401` + `WWW-Authenticate` with protected-resource metadata
+   - Unauthenticated MCP `initialize` → `200` with a session id
+   - Unauthenticated `tools/call` for `air_list_domains` → `401` + `WWW-Authenticate` with protected-resource metadata
 
 ## Required env
 

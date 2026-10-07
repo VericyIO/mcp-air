@@ -14,7 +14,7 @@ This package ships two transports:
 
 Local assessment workloads still execute on Thalus cloud via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). For stdio you provide a domain-scoped API key, or let the server store one when you create an account in chat; remote Directory clients authorize through the AIR portal (OAuth). No local database, worker, or Docker stack is required for stdio.
 
-**No AIR account?** The local server can create one from inside the conversation — see [Starting without an account](#starting-without-an-account). The hosted server gains the same flow with its next deploy.
+**No AIR account?** Create one from inside the conversation on the local server or the hosted connector — see [Starting without an account](#starting-without-an-account).
 
 ## Overview
 
@@ -127,8 +127,6 @@ Remote clients authorize with OAuth 2.0 against `https://api.air.thalus.ai` (aut
 End-user setup: [Remote MCP server (OAuth)](https://air.thalus.ai/docs/guides/mcp-remote-oauth).
 
 ## Starting without an account
-
-> **The hosted server has not shipped this yet.** Everything below is live on **stdio** today. The remote endpoint at `mcp.air.thalus.ai` still asks for authorization before anything, and gains the flow described here with its next deploy.
 
 **Both transports** support this. On stdio the server boots in setup mode with no credential; on the remote transport the connector can be added without a token. These tools need no credential:
 
