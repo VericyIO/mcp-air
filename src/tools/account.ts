@@ -27,8 +27,31 @@ const require = createRequire(import.meta.url)
  * A self-contained ESM bundle with no bare imports, inlined into the resource so
  * the form needs no bundler and no network fetch inside the iframe.
  */
-const appRuntime = (): string =>
-  readFileSync(require.resolve('@modelcontextprotocol/ext-apps/app-with-deps'), 'utf8')
+/**
+ * The published bundle ends in `export { … as App }`. That export name is not a
+ * local binding, so a script concatenated after it throws `App is not defined`
+ * and the form never connects. Keep the same file, and publish `App` on
+ * `globalThis` for the lines that follow.
+ */
+const appRuntime = (): string => {
+  const source = readFileSync(require.resolve('@modelcontextprotocol/ext-apps/app-with-deps'), 'utf8')
+  const exportStart = source.lastIndexOf('export{')
+  if (exportStart < 0) {
+    throw new Error('MCP App runtime has no export list')
+  }
+  const appLocal = source
+    .slice(exportStart + 'export{'.length)
+    .replace(/\};?\s*$/, '')
+    .split(',')
+    .map((part) => part.trim())
+    .find((part) => part.endsWith(' as App'))
+    ?.slice(0, -' as App'.length)
+    .trim()
+  if (appLocal === undefined || appLocal.length === 0) {
+    throw new Error('MCP App runtime does not export App')
+  }
+  return `${source.slice(0, exportStart)}globalThis.App = ${appLocal}\n`
+}
 
 const appOnly = (uri: string) => ({ ui: { resourceUri: uri, visibility: ['app'] as const } })
 
@@ -197,6 +220,7 @@ const formHtml = (): string => `<!doctype html>
   </section>
   <script type="module">
 ${appRuntime()}
+    const App = globalThis.App
     const app = new App({ name: '${MCP_AIR_SERVER_NAME}-signup-form', version: '${MCP_AIR_SERVER_VERSION}' }, {})
     await app.connect()
     const $ = (id) => document.getElementById(id)
