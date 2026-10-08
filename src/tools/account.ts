@@ -336,7 +336,17 @@ ${appRuntime()}
         $('done-note').textContent =
           'Organization ' + done.orgSlug + ', domain ' + done.domainSlug + ', ' + done.credits +
           ' assessment credit' + (done.credits === 1 ? '' : 's') + ' to start.'
-        $('signin').onclick = () => { void app.openLink({ url: done.signInUrl }) }
+        $('signin').onclick = async () => {
+          const button = $('signin')
+          button.disabled = true
+          button.textContent = 'Sign-in link opened'
+          try {
+            await app.openLink({ url: done.signInUrl })
+          } catch {
+            button.disabled = false
+            button.textContent = 'Open AIR and finish signing in'
+          }
+        }
         show('step-done')
         await app.updateModelContext({
           content: [{
