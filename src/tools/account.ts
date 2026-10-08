@@ -24,14 +24,19 @@ import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 const require = createRequire(import.meta.url)
 
 /**
+ * Names the form script uses from the inlined bundle. `export { eI as App }`
+ * does not create a local `App`, so the following lines would throw.
+ */
+const APP_RUNTIME_GLOBALS = [
+  'App',
+  'applyDocumentTheme',
+  'applyHostStyleVariables',
+  'applyHostFonts',
+] as const
+
+/**
  * A self-contained ESM bundle with no bare imports, inlined into the resource so
  * the form needs no bundler and no network fetch inside the iframe.
- */
-/**
- * The published bundle ends in `export { … as App }`. That export name is not a
- * local binding, so a script concatenated after it throws `App is not defined`
- * and the form never connects. Keep the same file, and publish `App` on
- * `globalThis` for the lines that follow.
  */
 const appRuntime = (): string => {
   const source = readFileSync(require.resolve('@modelcontextprotocol/ext-apps/app-with-deps'), 'utf8')
@@ -39,18 +44,22 @@ const appRuntime = (): string => {
   if (exportStart < 0) {
     throw new Error('MCP App runtime has no export list')
   }
-  const appLocal = source
+  const exported = source
     .slice(exportStart + 'export{'.length)
     .replace(/\};?\s*$/, '')
     .split(',')
     .map((part) => part.trim())
-    .find((part) => part.endsWith(' as App'))
-    ?.slice(0, -' as App'.length)
-    .trim()
-  if (appLocal === undefined || appLocal.length === 0) {
-    throw new Error('MCP App runtime does not export App')
-  }
-  return `${source.slice(0, exportStart)}globalThis.App = ${appLocal}\n`
+  const bindings = APP_RUNTIME_GLOBALS.map((name) => {
+    const local = exported
+      .find((part) => part.endsWith(` as ${name}`))
+      ?.slice(0, -` as ${name}`.length)
+      .trim()
+    if (local === undefined || local.length === 0) {
+      throw new Error(`MCP App runtime does not export ${name}`)
+    }
+    return `globalThis.${name} = ${local}`
+  })
+  return `${source.slice(0, exportStart)}${bindings.join('\n')}\n`
 }
 
 const appOnly = (uri: string) => ({ ui: { resourceUri: uri, visibility: ['app'] as const } })
@@ -166,32 +175,43 @@ const formHtml = (): string => `<!doctype html>
 <html><head><meta charset="utf-8" />
 <!-- Both schemes, or the browser paints the iframe an opaque canvas backdrop when
      its scheme differs from the host's, and Claude's light-dark() tokens misresolve. -->
-<meta name="color-scheme" content="light dark" /><style>
+<meta name="color-scheme" content="light dark" />
+<meta name="viewport" content="width=device-width, initial-scale=1" /><style>
   /* The host's frames are transparent so the conversation shows through. Painting a
      background of our own turns the form into an embedded box instead. */
-  html, body { background: transparent; }
+  html { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { background: transparent; width: 100%; max-width: 100%; overflow-x: hidden; }
+  body { overflow-y: auto; }
   /* Brand accent. The design guidelines keep structural colour on host tokens and
      allow your own for identity, so this is the one fixed pair: white on Thalus
      purple is 8.9:1, and it holds in light and dark because both ends are fixed. */
   :root { --air-brand: #782970; --air-brand-text: #ffffff; }
-  body { font: 14px/1.5 var(--font-sans, system-ui); color: var(--color-text-primary, #141413);
+  body { font: 14px/1.5 var(--font-sans, system-ui); color: var(--color-text-primary, light-dark(#141413, #faf9f5));
     margin: 0; padding: 16px; }
   h1 { font-size: 15px; margin: 0 0 12px; }
-  label { display: block; margin: 10px 0 4px; color: var(--color-text-secondary, #3d3d3a); }
-  input[type=text], input[type=email] { width: 100%; box-sizing: border-box; padding: 8px 10px;
-    border: 1px solid var(--color-border-primary, #1f1e1d66); border-radius: var(--border-radius-md, 8px);
-    background: var(--color-background-secondary, #f5f4ed); color: inherit; font: inherit; }
+  label { display: block; margin: 10px 0 4px; color: var(--color-text-secondary, light-dark(#3d3d3a, #c2c0b6)); }
+  input[type=text], input[type=email] { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; padding: 8px 10px;
+    border: 1px solid var(--color-border-primary, light-dark(#1f1e1d66, #dedcd166)); border-radius: var(--border-radius-md, 8px);
+    background: var(--color-background-secondary, light-dark(#f5f4ed, #262624));
+    color: var(--color-text-primary, light-dark(#141413, #faf9f5)); font: inherit; }
   .row { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; }
   .row label { margin: 0; }
   button { margin-top: 14px; padding: 8px 14px; font: inherit; cursor: pointer; border: 0;
     border-radius: var(--border-radius-md, 8px); background: var(--air-brand);
     color: var(--air-brand-text); }
-  button[disabled] { opacity: .5; cursor: default; }
-  .note { margin-top: 12px; color: var(--color-text-secondary, #3d3d3a); }
-  .err { color: var(--color-text-danger, #7f2c28); }
+  @media (max-width: 480px) {
+    body { padding: 12px; }
+    button { display: block; width: 100%; }
+  }
+  button[disabled] { cursor: default;
+    background: var(--color-background-disabled, light-dark(#ffffff80, #30302e80));
+    color: var(--color-text-disabled, light-dark(#14141380, #faf9f580)); }
+  .note { margin-top: 12px; color: var(--color-text-secondary, light-dark(#3d3d3a, #c2c0b6)); }
+  .err { color: var(--color-text-danger, light-dark(#7f2c28, #ee8884)); }
   /* color-text-accent is not a host token — it silently fell back to a fixed blue
      that ignored dark mode. color-text-info is the real one. */
-  a { color: var(--color-text-info, #3266ad); }
+  a { color: var(--color-text-info, light-dark(#3266ad, #80aadd)); }
   [hidden] { display: none !important; }
 </style></head><body>
   <section id="step-details">
@@ -220,12 +240,29 @@ const formHtml = (): string => `<!doctype html>
   </section>
   <script type="module">
 ${appRuntime()}
-    const App = globalThis.App
+    const { App, applyDocumentTheme, applyHostStyleVariables, applyHostFonts } = globalThis
+    const applyHostContext = (ctx) => {
+      if (ctx?.theme) applyDocumentTheme(ctx.theme)
+      if (ctx?.styles?.variables) applyHostStyleVariables(ctx.styles.variables)
+      if (ctx?.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts)
+    }
     const app = new App({ name: '${MCP_AIR_SERVER_NAME}-signup-form', version: '${MCP_AIR_SERVER_VERSION}' }, {})
+    const fitHost = () => {
+      const height = Math.ceil(document.documentElement.scrollHeight)
+      void app.sendSizeChanged({ height })
+    }
+    app.addEventListener('hostcontextchanged', (ctx) => {
+      applyHostContext(ctx)
+      fitHost()
+    })
     await app.connect()
+    const initialHostContext = app.getHostContext()
+    if (initialHostContext) applyHostContext(initialHostContext)
+    fitHost()
     const $ = (id) => document.getElementById(id)
     const show = (id) => {
       for (const s of ['step-details', 'step-code', 'step-done']) $(s).hidden = s !== id
+      fitHost()
     }
     const fail = (el, m) => { el.textContent = m; el.hidden = false }
     const call = async (name, args) => {
@@ -329,7 +366,12 @@ export const registerAccountTools = (
         text: formHtml(),
         // Claude web is borderless already; other hosts wrap a widget in their own
         // bordered card, which double-frames a form that draws no frame of its own.
-        _meta: { ui: { prefersBorder: false } },
+        _meta: {
+          ui: {
+            prefersBorder: false,
+            csp: { resourceDomains: ['https://assets.claude.ai'] },
+          },
+        },
       },
     ],
   }))
