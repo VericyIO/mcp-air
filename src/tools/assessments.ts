@@ -33,6 +33,8 @@ const REPORT_SECTIONS = [
   'lensViews',
   'euAiActTier',
   'euAiActFacts',
+  'projectDecisions',
+  'changesSincePrevious',
   'evidenceAppendix',
   'inputArtifacts',
 ] as const
