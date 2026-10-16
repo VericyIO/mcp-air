@@ -206,6 +206,7 @@ Choose a portal preset when creating your key:
 | `air_list_domains`, `air_start_assessment`, `air_get_assessment_report` | `assessmentRunner` |
 | `air_upload_document_*`, `air_run_assessment_from_file`                 | **`fullPipeline`** |
 | `air_search`, `air_get_domain_portfolio`, `air_create_project`          | **`fullPipeline`** |
+| `air_record_project_decision`                                           | **`fullPipeline`** |
 
 Org-wide portfolio dashboards require a browser session in the portal and are not available via MCP.
 
@@ -235,13 +236,14 @@ Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/
 
 ## Capabilities
 
-### Tools (35 stdio / 32 remote)
+### Tools (37 stdio / 34 remote)
 
 | Category        | Tools                                                                                                                                                                                                                       |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Discovery**   | `air_list_domains`, `air_get_domain`, `air_list_projects`, `air_get_project`, `air_create_project`, `air_search`                                                                                                            |
 | **Documents**   | `air_list_documents`, `air_get_document_download_url`, `air_list_artifacts`, `air_get_artifact_text`, `air_upload_document_init`, `air_upload_document_complete`                                                                  |
 | **Assessments** | `air_list_assessments`, `air_get_assessment`, `air_get_assessment_report`, `air_get_assessment_summary`, `air_list_open_facts`, `air_submit_fact_answers`, `air_get_assessment_stages`, `air_get_assessment_input_artifacts`, `air_create_assessment_draft`, `air_start_assessment`, `air_retry_assessment` |
+| **Decisions**   | `air_list_project_decisions`, `air_record_project_decision`                                                                                                                                                                 |
 | **Portfolio**   | `air_get_domain_portfolio`                                                                                                                                                                                                  |
 | **Composites**  | `air_wait_for_document_extraction`, `air_wait_for_assessment`, `air_run_assessment_from_file`†, `air_run_full_assessment_pipeline`†                                                                                         |
 | **Account**     | `air_create_account`‡, `air_signup_send_code`‡§, `air_signup_verify_code`‡§, `air_sign_out`¶                                                                                                                                |
@@ -282,7 +284,7 @@ A full report can run past what a single tool result can carry, so `air_get_asse
 
 | Call                                                          | You get                                                          |
 | ------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `air_get_assessment_summary`                                  | Overview, quality, EU AI Act tier, and per-section counts        |
+| `air_get_assessment_summary`                                  | Overview, quality, EU AI Act tier, per-section counts, saved choices, and what changed since the previous scan |
 | `air_get_assessment_report` (no `section`)                    | The whole report, or a section index if it doesn't fit           |
 | `air_get_assessment_report` + `section`                       | That one slice                                                   |
 | `air_get_assessment_report` + `section` + `offset` / `limit`  | A page of a list section, with `totalItems` and `nextOffset`     |

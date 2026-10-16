@@ -105,6 +105,8 @@ const buildAssessmentSummary = (report: Record<string, unknown>) => ({
     ? report.evidenceAppendix.length
     : 0,
   inputArtifactCount: Array.isArray(report.inputArtifacts) ? report.inputArtifacts.length : 0,
+  projectDecisions: report.projectDecisions,
+  changesSincePrevious: report.changesSincePrevious,
 })
 
 export const registerAssessmentTools = (server: McpServer, api: IntegratorApiClient) => {
@@ -238,7 +240,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary,
       description:
-        'Fetch a slim assessment report summary (overview, quality, EU AI Act tier, and section counts) without the full risk/evidence payload. Prefer this over air_get_assessment_report for triage. Requires assessments:read.',
+        'Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, EU AI Act tier, section counts, the saved project choices (projectDecisions), and changesSincePrevious — each checklist item that closed, is still open, is new, or came back since the previous completed scan, plus whether the input documents changed. Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary },
     },

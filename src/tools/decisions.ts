@@ -23,7 +23,7 @@ export const registerDecisionTools = (server: McpServer, api: IntegratorApiClien
     {
       title: MCP_AIR_TOOL_TITLES.air_list_project_decisions,
       description:
-        'List saved choices for a project, each judged against assessmentPid. posture is stands, conflicts, or settled. Requires projects:read.',
+        'List saved choices for a project, each judged against assessmentPid. posture: stands (no later scan disagrees), conflicts (a later scan raised the topic again; show the saved sentence and ask again), settled (the accepted gap is no longer open). Requires projects:read.',
       inputSchema: {
         projectPid: z.string(),
         assessmentPid: z.string(),
@@ -44,7 +44,7 @@ export const registerDecisionTools = (server: McpServer, api: IntegratorApiClien
     {
       title: MCP_AIR_TOOL_TITLES.air_record_project_decision,
       description:
-        'Save a developer choice on the project. not_applicable covers a whole themeId. accept_gap covers one controlId and requires it. A later choice for the same theme or control replaces the earlier one. Requires projects:write.',
+        "Save a developer choice on the project, in the person's own words. Ask them first. Use not_applicable when the whole topic (themeId) does not apply to this system: later scans keep that topic and its gaps quiet until one raises the topic again. Use accept_gap when the topic applies but the person accepts one missing control (controlId required): the gap stays listed with the saved sentence beside it. The scan the choice is recorded on does not judge it; later scans do. A later choice for the same theme or control replaces the earlier one. Requires projects:write.",
       inputSchema: {
         projectPid: z.string(),
         assessmentPid: z.string(),
@@ -56,6 +56,18 @@ export const registerDecisionTools = (server: McpServer, api: IntegratorApiClien
       annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_record_project_decision },
     },
     async ({ projectPid, assessmentPid, choice, themeId, controlId, reason }) => {
+      if (choice === 'accept_gap' && controlId === undefined) {
+        return toolErrorResult(
+          new Error('accept_gap needs the controlId of the one gap being accepted.'),
+          'air_record_project_decision',
+        )
+      }
+      if (choice === 'not_applicable' && controlId !== undefined) {
+        return toolErrorResult(
+          new Error('not_applicable covers the whole theme; leave controlId out.'),
+          'air_record_project_decision',
+        )
+      }
       try {
         return toolJsonResult(
           await api.recordProjectDecision(projectPid, {
