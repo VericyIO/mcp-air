@@ -132,6 +132,8 @@ const scopeHints: Readonly<Record<string, string>> = {
   air_get_assessment_summary: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   air_list_open_facts: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   air_submit_fact_answers: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_WRITE}`,
+  air_list_project_decisions: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_PROJECTS_READ}`,
+  air_record_project_decision: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_PROJECTS_WRITE} (fullPipeline preset)`,
   air_get_assessment_stages: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   air_get_assessment_input_artifacts: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   air_create_assessment_draft: `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_WRITE}`,

@@ -353,6 +353,29 @@ export class IntegratorApiClient {
       body: payload,
     })
   }
+
+  listProjectDecisions(projectPid: string, assessmentPid: string) {
+    return this.request<ReadonlyArray<Record<string, unknown>>>(
+      `/projects/${encodeURIComponent(projectPid)}/decisions`,
+      { query: { assessmentPid } },
+    )
+  }
+
+  recordProjectDecision(
+    projectPid: string,
+    payload: {
+      readonly assessmentPid: string
+      readonly choice: 'not_applicable' | 'accept_gap'
+      readonly themeId: string
+      readonly controlId?: string
+      readonly reason: string
+    },
+  ) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/decisions`,
+      { method: 'POST', body: payload },
+    )
+  }
 }
 
 export const createIntegratorApiClient = (

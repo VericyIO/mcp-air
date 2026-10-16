@@ -14,6 +14,7 @@ import { registerReportResources } from './resources/reports.js'
 import { registerAccountTools } from './tools/account.js'
 import { registerAssessmentTools } from './tools/assessments.js'
 import { registerCompositeTools } from './tools/composites.js'
+import { registerDecisionTools } from './tools/decisions.js'
 import { registerDiscoverTools } from './tools/discover.js'
 import { registerDocumentTools } from './tools/documents.js'
 import { registerPortfolioTools } from './tools/portfolio.js'
@@ -66,6 +67,7 @@ export const createAirMcpServer = (
   registerDiscoverTools(target, api)
   registerDocumentTools(target, api)
   registerAssessmentTools(target, api)
+  registerDecisionTools(target, api)
   registerPortfolioTools(target, api)
   registerSupportTools(target, api)
   registerAccountTools(target, api, options.session)

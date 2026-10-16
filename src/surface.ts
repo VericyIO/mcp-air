@@ -134,7 +134,7 @@ export const requestNeedsAuthentication = (body: unknown): boolean => {
   return messageNeedsAuth(body as JsonRpcLike)
 }
 
-export const MCP_AIR_REMOTE_TOOL_COUNT = 32 as const
+export const MCP_AIR_REMOTE_TOOL_COUNT = 34 as const
 
 /**
  * Remote surface. Drops the two tools hosted Claude clients cannot drive:
@@ -160,6 +160,8 @@ export const MCP_AIR_REMOTE_TOOL_NAMES = [
   'air_get_assessment_summary',
   'air_list_open_facts',
   'air_submit_fact_answers',
+  'air_list_project_decisions',
+  'air_record_project_decision',
   'air_get_assessment_stages',
   'air_get_assessment_input_artifacts',
   'air_create_assessment_draft',

@@ -20,6 +20,8 @@ export const MCP_AIR_TOOL_TITLES = {
   air_get_assessment_summary: 'Get assessment summary',
   air_list_open_facts: 'List open EU AI Act facts',
   air_submit_fact_answers: 'Submit EU AI Act fact answers',
+  air_list_project_decisions: 'List saved project choices',
+  air_record_project_decision: 'Save a project choice',
   air_get_assessment_stages: 'Get assessment stages',
   air_get_assessment_input_artifacts: 'Get assessment input artifacts',
   air_create_assessment_draft: 'Create assessment draft',
