@@ -240,7 +240,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary,
       description:
-        'Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, EU AI Act tier, section counts, the saved project choices (projectDecisions), and changesSincePrevious — each checklist item that closed, is still open, is new, or came back since the previous completed scan, plus whether the input documents changed. Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. Requires assessments:read.',
+        'Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, EU AI Act tier, section counts, the saved project choices (projectDecisions, each with posture and, when it came back, cameBackBecause), and changesSincePrevious — each checklist item that closed, is still open, is new, or came back since the previous completed scan, plus inputs: the documents added, removed, or changed in content (a re-upload of the same text is unchanged). Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary },
     },
@@ -259,7 +259,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_list_open_facts,
       description:
-        'List the deduplicated open EU AI Act fact worklist for an assessment (each missing fact once, with criteria it unblocks). Requires assessments:read.',
+        'List the open EU AI Act facts for an assessment (each missing fact once, with the criteria it unblocks). Each fact has a description of what it means and a valueKind: boolean facts take true, false, or null (unknown); array facts take only words from allowedValues, or [] for none of them. Also lists answerConflicts: answers the project kept from earlier scans that this scan read differently from new text, with the scan reading and its excerpts; the kept answer still sets the tier until the person answers again. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_open_facts },
     },
@@ -277,7 +277,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_submit_fact_answers,
       description:
-        'Submit answers for open EU AI Act facts and re-derive the waterfall tier. Pass factPath + value (+ optional justification). Requires assessments:write.',
+        'Submit answers for open EU AI Act facts and re-derive the tier on this assessment, with no new scan. Pass factPath + value + a short justification in the person\'s words. An array fact accepts only its allowedValues; any other word is refused with 422 naming the allowed values. Answers are kept on the project, so later scans start from them; null ("I don\'t know") clears a kept answer. Answering a conflicted fact replaces the kept answer. Requires assessments:write.',
       inputSchema: {
         assessmentPid: z.string(),
         answers: z

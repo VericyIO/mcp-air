@@ -23,7 +23,7 @@ export const registerDecisionTools = (server: McpServer, api: IntegratorApiClien
     {
       title: MCP_AIR_TOOL_TITLES.air_list_project_decisions,
       description:
-        'List saved choices for a project, each judged against assessmentPid. posture: stands (no later scan disagrees), conflicts (a later scan raised the topic again; show the saved sentence and ask again), settled (the accepted gap is no longer open). Requires projects:read.',
+        'List saved choices for a project, each judged against assessmentPid. posture: stands (quiet; the topic is raised on the same documents and seriousness the person decided on), conflicts (show the saved sentence and ask again; cameBackBecause says why: new_evidence = the scan cites text that was not in the documents they decided on, more_serious = the topic moved up, for example from the watchlist to a risk, review_due = six months have passed), settled (the accepted gap is no longer open). Requires projects:read.',
       inputSchema: {
         projectPid: z.string(),
         assessmentPid: z.string(),
@@ -44,7 +44,7 @@ export const registerDecisionTools = (server: McpServer, api: IntegratorApiClien
     {
       title: MCP_AIR_TOOL_TITLES.air_record_project_decision,
       description:
-        "Save a developer choice on the project, in the person's own words. Ask them first. Use not_applicable when the whole topic (themeId) does not apply to this system: later scans keep that topic and its gaps quiet until one raises the topic again. Use accept_gap when the topic applies but the person accepts one missing control (controlId required): the gap stays listed with the saved sentence beside it. The scan the choice is recorded on does not judge it; later scans do. A later choice for the same theme or control replaces the earlier one. Requires projects:write.",
+        "Save a developer choice on the project, in the person's own words. Ask them first. Use not_applicable when the whole topic (themeId) does not apply to this system: later scans keep that topic and its gaps quiet while it is raised on the same documents and seriousness, and bring it back when the scan cites new text, the topic grows more serious, or six months have passed. Use accept_gap when the topic applies but the person accepts one missing control (controlId required): the gap stays listed with the saved sentence beside it. Pass the assessmentPid the person decided on; the choice remembers that scan's documents. The scan the choice is recorded on does not judge it; later scans do. A later choice for the same theme or control replaces the earlier one. Requires projects:write.",
       inputSchema: {
         projectPid: z.string(),
         assessmentPid: z.string(),
