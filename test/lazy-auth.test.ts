@@ -196,16 +196,39 @@ describe('requestNeedsAuthentication', () => {
 })
 
 describe('deployment identity in the OAuth challenge', () => {
-  it('points resource metadata at the API this deployment talks to', async () => {
-    // Pinned to production, a dev deployment sends half its OAuth discovery to
-    // production and no flow against another environment can complete.
+  it('serves protected resource metadata on the MCP host, at both well-known paths, with no token', async () => {
+    // Connect gets a 200 for initialize, so Claude looks for this on the MCP host.
+    // Missing, it guesses /register and /authorize here and sign-in never starts.
+    const server = await startTestServer()
+    try {
+      const origin = new URL(server.url).origin
+      for (const path of [
+        '/.well-known/oauth-protected-resource/mcp',
+        '/.well-known/oauth-protected-resource',
+      ]) {
+        const response = await fetch(`${origin}${path}`)
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+          resource: 'https://mcp.air.thalus.ai/mcp',
+          authorization_servers: [testConfig.apiUrl],
+          scopes_supported: ['fullPipeline'],
+          bearer_methods_supported: ['header'],
+        })
+      }
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('points the 401 challenge at the metadata on this deployment’s own host', async () => {
     const server = await startTestServer()
     try {
       const response = await post(server.url, toolCall('air_list_domains'))
       const challenge = response.headers.get('www-authenticate') ?? ''
 
       expect(challenge).toContain(
-        `resource_metadata="${testConfig.apiUrl}/.well-known/oauth-protected-resource"`,
+        'resource_metadata="https://mcp.air.thalus.ai/.well-known/oauth-protected-resource/mcp"',
       )
     } finally {
       await server.stop()

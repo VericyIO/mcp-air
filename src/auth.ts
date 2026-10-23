@@ -169,7 +169,7 @@ export const unauthorizedWwwAuthenticateHeader = (
   invalidToken = false,
 ): string =>
   `Bearer realm="AIR MCP", resource_metadata="${protectedResourceMetadataUrl(
-    config.apiUrl,
+    config.mcpResourceIdentifier,
   )}", scope="${MCP_AIR_OAUTH_REQUIRED_SCOPE}"${
     invalidToken ? ', error="invalid_token"' : ""
   }`;

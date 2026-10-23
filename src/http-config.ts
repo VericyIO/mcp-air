@@ -33,15 +33,40 @@ export const MCP_AIR_REDIS_URL_ENV = "REDIS_URL" as const;
 export const MCP_AIR_OAUTH_RESOURCE_ENV = "MCP_OAUTH_RESOURCE" as const;
 
 /**
- * Protected-resource metadata URL advertised in 401 responses.
- *
- * Derived from the API this deployment actually talks to rather than pinned to
- * production, because the AIR API is both the upstream and the metadata host, and
- * two sources of truth for one origin is how a dev deployment ends up pointing
- * half of its OAuth discovery at production.
+ * RFC 9728 well-known path for the MCP resource. The suffix is the resource's own
+ * path, so a client that knows only the MCP URL finds the metadata on the MCP host.
  */
-export const protectedResourceMetadataUrl = (apiUrl: string): string =>
-  `${apiUrl.replace(/\/$/, "")}/.well-known/oauth-protected-resource`;
+export const protectedResourceMetadataPath = (
+  resourceIdentifier: string,
+): string => {
+  const { pathname } = new URL(resourceIdentifier);
+  return `/.well-known/oauth-protected-resource${pathname === "/" ? "" : pathname}`;
+};
+
+/** Protected-resource metadata URL advertised in 401 responses: this deployment's own host. */
+export const protectedResourceMetadataUrl = (
+  resourceIdentifier: string,
+): string =>
+  new URL(
+    protectedResourceMetadataPath(resourceIdentifier),
+    resourceIdentifier,
+  ).toString();
+
+/**
+ * Protected-resource metadata this deployment serves.
+ *
+ * Connecting and listing tools need no token, so a client's sign-in step gets a 200
+ * from the MCP endpoint and looks for this document on the MCP host. Without it the
+ * client guesses `/register` and `/authorize` on this host and sign-in never starts.
+ * The authorization server is the API this deployment talks to, so a dev deployment
+ * never sends its sign-in to production.
+ */
+export const protectedResourceMetadata = (config: McpAirHttpRuntimeConfig) => ({
+  resource: config.mcpResourceIdentifier,
+  authorization_servers: [config.apiUrl],
+  scopes_supported: [MCP_AIR_OAUTH_REQUIRED_SCOPE],
+  bearer_methods_supported: ["header"],
+});
 
 /**
  * Audience required on OAuth access tokens accepted by the hosted MCP resource:

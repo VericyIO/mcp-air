@@ -12,7 +12,11 @@ import {
   resolveMcpCredentials,
   unauthorizedWwwAuthenticateHeader,
 } from "./auth.js";
-import type { McpAirHttpRuntimeConfig } from "./http-config.js";
+import {
+  protectedResourceMetadata,
+  protectedResourceMetadataPath,
+  type McpAirHttpRuntimeConfig,
+} from "./http-config.js";
 import { RedisTaskStore } from "./redis-task-store.js";
 import { createAirMcpServer } from "./server.js";
 import { requestNeedsAuthentication } from "./surface.js";
@@ -108,6 +112,17 @@ export const createMcpAirHttpApp = async (
     }
     res.status(200).send("ok");
   });
+
+  // Root and path-suffixed forms (RFC 9728 §3.1); clients try the suffixed one first.
+  app.get(
+    [
+      "/.well-known/oauth-protected-resource",
+      protectedResourceMetadataPath(config.mcpResourceIdentifier),
+    ],
+    (_req, res) => {
+      res.json(protectedResourceMetadata(config));
+    },
+  );
 
   const handleMcp = async (req: Request, res: Response) => {
     try {
