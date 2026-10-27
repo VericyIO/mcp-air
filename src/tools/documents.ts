@@ -2,7 +2,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { IntegratorApiClient } from "../client/integrator-api.js";
+import {
+  MCP_AIR_DEFAULT_UPLOAD_CONTENT_TYPE,
+  MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS,
+  MCP_AIR_REMOTE_WAIT_TIMEOUT_MS,
+  MCP_AIR_UPLOAD_DOCUMENT_DESCRIPTION,
+} from "../config.js";
 import { toolErrorResult, toolJsonResult } from "../errors.js";
+import { pollUntilDocumentTerminal } from "../poll.js";
+import type { McpAirSurface } from "../surface.js";
 import { MCP_AIR_TOOL_TITLES } from "../tool-titles.js";
 
 const readOnly = {
@@ -20,7 +28,12 @@ const writeHint = {
 export const registerDocumentTools = (
   server: McpServer,
   api: IntegratorApiClient,
+  surface: McpAirSurface,
 ) => {
+  const documentWaitCeilingMs =
+    surface === "remote"
+      ? MCP_AIR_REMOTE_WAIT_TIMEOUT_MS
+      : MCP_AIR_DOCUMENT_EXTRACTION_POLL_TIMEOUT_MS;
   server.registerTool(
     "air_list_documents",
     {
@@ -165,6 +178,64 @@ export const registerDocumentTools = (
         );
       } catch (error) {
         return toolErrorResult(error, "air_upload_document_complete");
+      }
+    },
+  );
+
+  server.registerTool(
+    "air_upload_document",
+    {
+      title: MCP_AIR_TOOL_TITLES.air_upload_document,
+      description: MCP_AIR_UPLOAD_DOCUMENT_DESCRIPTION,
+      inputSchema: {
+        projectPid: z.string(),
+        fileName: z.string(),
+        content: z.string(),
+        contentType: z.string().default(MCP_AIR_DEFAULT_UPLOAD_CONTENT_TYPE),
+      },
+      annotations: {
+        ...writeHint,
+        title: MCP_AIR_TOOL_TITLES.air_upload_document,
+      },
+    },
+    async ({ projectPid, fileName, content, contentType }) => {
+      try {
+        const init = await api.initUpload(projectPid, fileName, contentType);
+        await api.uploadContentToPresignedUrl(
+          init.uploadUrl,
+          content,
+          contentType,
+        );
+        const completed = await api.completeUpload(projectPid, {
+          s3Key: init.s3Key,
+          filename: fileName,
+          contentType,
+        });
+        const outcome = await pollUntilDocumentTerminal(async () => {
+          const documents = await api.listDocuments(projectPid);
+          const match = documents.find((row) => row.pid === completed.sourcePid);
+          if (match === undefined) {
+            throw new Error(`Document ${completed.sourcePid} not found`);
+          }
+          return { status: String(match.status), document: match };
+        }, documentWaitCeilingMs);
+
+        if (!outcome.ready) {
+          return toolJsonResult({
+            sourcePid: completed.sourcePid,
+            status: outcome.last?.status ?? "unknown",
+            ready: false,
+            note: `Extraction is still running after ${documentWaitCeilingMs}ms. Call air_wait_for_document_extraction again with the same sourcePid to keep waiting.`,
+          });
+        }
+
+        return toolJsonResult({
+          sourcePid: completed.sourcePid,
+          status: outcome.value.status,
+          ready: true,
+        });
+      } catch (error) {
+        return toolErrorResult(error, "air_upload_document");
       }
     },
   );

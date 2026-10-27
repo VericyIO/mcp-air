@@ -65,7 +65,7 @@ export const createAirMcpServer = (
   const target = options.session === undefined ? server : options.session.record(server)
 
   registerDiscoverTools(target, api)
-  registerDocumentTools(target, api)
+  registerDocumentTools(target, api, surface)
   registerAssessmentTools(target, api)
   registerDecisionTools(target, api)
   registerPortfolioTools(target, api)

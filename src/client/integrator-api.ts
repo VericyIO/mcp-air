@@ -188,6 +188,19 @@ export class IntegratorApiClient {
     }
   }
 
+  async uploadContentToPresignedUrl(uploadUrl: string, content: string, contentType: string) {
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: content,
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new IntegratorApiError(response.status, text)
+    }
+  }
+
   listAssessments(projectPid: string) {
     return this.request<ReadonlyArray<Record<string, unknown>>>(
       `/assessments/projects/${encodeURIComponent(projectPid)}`,

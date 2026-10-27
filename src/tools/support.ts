@@ -9,6 +9,7 @@ import {
   MCP_AIR_SUPPORT_FEEDBACK_CATEGORIES,
   MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH,
 } from '../config.js'
+import { supportsElicitation } from '../elicitation.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
 import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
@@ -33,9 +34,6 @@ type ConfirmedFeedback = {
   readonly message: string
   readonly contactEmail: string | undefined
 }
-
-const supportsElicitation = (server: McpServer): boolean =>
-  server.server.getClientCapabilities()?.elicitation !== undefined
 
 /**
  * Triage context for the AIR support inbox. Without it the internal notification
