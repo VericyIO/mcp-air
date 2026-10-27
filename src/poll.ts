@@ -66,6 +66,7 @@ export const pollUntilAssessmentReady = async (
   deadlineMs: number,
   initialIntervalMs: number = MCP_AIR_ASSESSMENT_POLL_INTERVAL_MS,
   maxIntervalMs: number = MCP_AIR_ASSESSMENT_POLL_MAX_INTERVAL_MS,
+  observe?: (assessment: Record<string, unknown>) => Promise<'continue' | 'yield'>,
 ): Promise<PollOutcome<Record<string, unknown>>> => {
   const deadline = Date.now() + deadlineMs
   let intervalMs = initialIntervalMs
@@ -74,6 +75,9 @@ export const pollUntilAssessmentReady = async (
   while (Date.now() < deadline) {
     const assessment = await fetchAssessment()
     last = assessment
+    if (observe !== undefined && (await observe(assessment)) === 'yield') {
+      return { ready: false, last: assessment }
+    }
     const status = String(assessment.status)
     if (isAssessmentDraft(status)) {
       const assessmentPid = typeof assessment.pid === 'string' ? assessment.pid : 'unknown'

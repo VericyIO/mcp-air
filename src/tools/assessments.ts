@@ -435,7 +435,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_start_assessment,
       description:
-        'Start a risk assessment on a project. Consumes org credits and dispatches the risk pipeline. Requires assessments:write. Returns assessmentPid.',
+        'Start a risk assessment on a project. Consumes org credits and dispatches the risk pipeline. Requires assessments:write. Returns assessmentPid and reportUrl. Give the person the reportUrl link when the scan starts.',
       inputSchema: {
         projectPid: z.string(),
         name: z.string().describe('Display name for the run'),

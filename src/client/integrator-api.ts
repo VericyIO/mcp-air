@@ -253,7 +253,7 @@ export class IntegratorApiClient {
   }
 
   startAssessment(projectPid: string, name: string, artifactPids: ReadonlyArray<string>) {
-    return this.request<{ assessmentPid: string; workflowRunId: string }>(
+    return this.request<{ assessmentPid: string; workflowRunId: string; reportUrl: string }>(
       `/assessments/projects/${encodeURIComponent(projectPid)}`,
       { method: 'POST', body: { name, artifactPids } },
     )
@@ -270,6 +270,7 @@ export class IntegratorApiClient {
     return this.request<{
       assessmentPid: string
       workflowRunId: string
+      reportUrl: string
       resumedFromStage: string | null
     }>(`/assessments/${encodeURIComponent(assessmentPid)}/retry`, { method: 'POST', body: {} })
   }

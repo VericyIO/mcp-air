@@ -87,6 +87,7 @@ describe('MCP Tasks for long-running composite tools', () => {
     api.startAssessment = async () => ({
       assessmentPid: 'pasm_test',
       workflowRunId: 'wf_test',
+      reportUrl: 'https://air.thalus.ai/reports/pasm_test',
     })
     api.getAssessment = async () => ({
       pid: 'pasm_test',
