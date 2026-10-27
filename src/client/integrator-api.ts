@@ -240,6 +240,39 @@ export class IntegratorApiClient {
     )
   }
 
+  listProjectFactAnswers(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/fact-answers`,
+    )
+  }
+
+  savePreparedAnswers(
+    assessmentPid: string,
+    answers: ReadonlyArray<{
+      factPath: string
+      value: boolean | ReadonlyArray<string> | null
+      justification?: string | undefined
+    }>,
+  ) {
+    return this.request<Record<string, unknown>>(
+      `/assessments/${encodeURIComponent(assessmentPid)}/prepared-answers`,
+      { method: 'POST', body: { answers } },
+    )
+  }
+
+  getRulesNotice(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/rules-notice`,
+    )
+  }
+
+  dismissRulesNotice(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/rules-notice/dismiss`,
+      { method: 'POST', body: {} },
+    )
+  }
+
   listAssessmentStages(assessmentPid: string) {
     return this.request<ReadonlyArray<Record<string, unknown>>>(
       `/assessments/${encodeURIComponent(assessmentPid)}/stages`,

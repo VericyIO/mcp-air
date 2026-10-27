@@ -18,6 +18,7 @@ import { registerDecisionTools } from './tools/decisions.js'
 import { registerDiscoverTools } from './tools/discover.js'
 import { registerDocumentTools } from './tools/documents.js'
 import { registerPortfolioTools } from './tools/portfolio.js'
+import { registerScanPrepTools } from './tools/scan-prep.js'
 import { registerSupportTools } from './tools/support.js'
 import type { StdioSession } from './session.js'
 import type { McpAirSurface } from './surface.js'
@@ -67,6 +68,7 @@ export const createAirMcpServer = (
   registerDiscoverTools(target, api)
   registerDocumentTools(target, api, surface)
   registerAssessmentTools(target, api)
+  registerScanPrepTools(target, api)
   registerDecisionTools(target, api)
   registerPortfolioTools(target, api)
   registerSupportTools(target, api)
