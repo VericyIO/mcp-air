@@ -305,7 +305,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary,
       description:
-        `Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, ${MCP_AIR_SUMMARY_TIER_SENTENCE}, section counts, the saved project choices (projectDecisions, each with posture and, when it came back, cameBackBecause), and changesSincePrevious — each checklist item that closed, is still open, is new, or came back since the previous completed scan, plus inputs: the documents added, removed, or changed in content (a re-upload of the same text is unchanged). Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. ${MCP_AIR_SUMMARY_TOP_RISKS_SENTENCE} Requires assessments:read.`,
+        `Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, ${MCP_AIR_SUMMARY_TIER_SENTENCE}, section counts, the saved project choices (projectDecisions, each with posture and, when it came back, cameBackBecause), and changesSincePrevious — each checklist item that closed, is still open, is new, was newly judged, came back, or could not be judged since the previous completed scan, plus inputs: the documents added, removed, or changed in content (a re-upload of the same text is unchanged). Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. ${MCP_AIR_SUMMARY_TOP_RISKS_SENTENCE} Requires assessments:read.`,
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary },
     },
