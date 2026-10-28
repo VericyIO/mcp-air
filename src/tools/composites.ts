@@ -36,11 +36,11 @@ const readOnlyHint = {
 } as const
 
 const STAGE_CHANGED_NOTE =
-  'AIR is now on this stage. Tell the person the stage label in one line, then call air_wait_for_assessment again.'
+  'AIR is now on this step. Tell the person stageLabel in one line, then call air_wait_for_assessment again with lastStageLabel set to it.'
 
 /**
- * Label to show while a scan runs. A running stage wins. Otherwise the last
- * completed stage. A row that is used and has no string label is a defect.
+ * The line to show while a scan runs: "Step 4 of 12: Checking each risk theme". A running stage
+ * wins, otherwise the last completed one. A used row without a label or a step is a defect.
  */
 export const currentStageLabel = (
   stages: ReadonlyArray<Record<string, unknown>>,
@@ -51,14 +51,15 @@ export const currentStageLabel = (
   if (chosen === undefined) {
     return undefined
   }
-  if (typeof chosen.label !== 'string') {
-    throw new Error('Assessment stage is missing a label')
+  if (
+    typeof chosen.label !== 'string' ||
+    typeof chosen.step !== 'number' ||
+    typeof chosen.stepCount !== 'number'
+  ) {
+    throw new Error('Assessment stage is missing its label or step')
   }
-  return chosen.label
+  return `Step ${chosen.step} of ${chosen.stepCount}: ${chosen.label}`
 }
-
-const completedStageCount = (stages: ReadonlyArray<Record<string, unknown>>): number =>
-  stages.filter((stage) => stage.status === 'completed' || stage.status === 'skipped').length
 
 /**
  * MCP Tasks execution — long-running pipeline tools return a task handle immediately.
@@ -148,7 +149,7 @@ export const registerCompositeTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment,
       description:
-        'Wait until an assessment is completed, failed, or reportAvailable, or until the stage changes, up to timeoutMs. Uses exponential backoff. A stage change returns ready:false with stageLabel, the line to show the person, and reportUrl. Call again with the same assessmentPid. Returns ready:false with the last observed status if the wait budget runs out — call again with the same assessmentPid to keep waiting. Requires assessments:read.',
+        'Wait until an assessment is completed, failed, or reportAvailable, or until its step differs from lastStageLabel, up to timeoutMs. Uses exponential backoff. A new step returns ready:false with stageLabel ("Step 4 of 12: Checking each risk theme"), the line to show the person, and reportUrl. Call again with lastStageLabel set to the line you showed. Returns ready:false with the last observed status if the wait budget runs out — call again to keep waiting. Requires assessments:read.',
       inputSchema: {
         assessmentPid: z.string(),
         timeoutMs: z
@@ -158,12 +159,16 @@ export const registerCompositeTools = (
           .max(assessmentWaitCeilingMs)
           .optional()
           .describe(`Default ${assessmentWaitCeilingMs}ms; max ${assessmentWaitCeilingMs}ms`),
+        lastStageLabel: z
+          .string()
+          .optional()
+          .describe('The step line you last showed the person; omit on the first wait'),
       },
       annotations: { ...readOnlyHint, title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment },
     },
-    async ({ assessmentPid, timeoutMs }, extra) => {
+    async ({ assessmentPid, timeoutMs, lastStageLabel }, extra) => {
       const timeout = timeoutMs ?? assessmentWaitCeilingMs
-      let announcedLabel: string | undefined
+      let announcedLabel = lastStageLabel
       let stageChanged = false
       try {
         const outcome = await pollUntilAssessmentReady(
@@ -184,28 +189,19 @@ export const registerCompositeTools = (
             if (label === undefined) {
               return 'continue'
             }
-            if (announcedLabel === undefined) {
-              announcedLabel = label
-              const progressToken = extra._meta?.progressToken
-              if (typeof progressToken === 'string' || typeof progressToken === 'number') {
-                await extra.sendNotification({
-                  method: 'notifications/progress',
-                  params: {
-                    progressToken,
-                    progress: completedStageCount(stages),
-                    total: stages.length,
-                    message: label,
-                  },
-                })
-              }
+            if (label === announcedLabel) {
               return 'continue'
             }
-            if (label !== announcedLabel) {
-              announcedLabel = label
-              stageChanged = true
-              return 'yield'
+            announcedLabel = label
+            stageChanged = true
+            const progressToken = extra._meta?.progressToken
+            if (typeof progressToken === 'string' || typeof progressToken === 'number') {
+              await extra.sendNotification({
+                method: 'notifications/progress',
+                params: { progressToken, progress: 0, message: label },
+              })
             }
-            return 'continue'
+            return 'yield'
           },
         )
 
@@ -228,7 +224,7 @@ export const registerCompositeTools = (
             assessment: outcome.last,
             ...(typeof announcedLabel === 'string' ? { stageLabel: announcedLabel } : {}),
             ...(typeof reportUrl === 'string' ? { reportUrl } : {}),
-            note: `Assessment is still running after ${timeout}ms. Call air_wait_for_assessment again with the same assessmentPid to keep waiting.`,
+            note: `Assessment is still running after ${timeout}ms. Call air_wait_for_assessment again with the same assessmentPid and lastStageLabel to keep waiting.`,
           })
         }
 

@@ -1,5 +1,5 @@
 /** Expected MCP surface — update when adding or removing tools, resources, or prompts. */
-export const MCP_AIR_EXPECTED_TOOL_COUNT = 42 as const
+export const MCP_AIR_EXPECTED_TOOL_COUNT = 44 as const
 
 export const MCP_AIR_EXPECTED_RESOURCE_TEMPLATE_COUNT = 3 as const
 
@@ -32,7 +32,9 @@ export const MCP_AIR_EXPECTED_TOOL_NAMES = [
   'air_list_project_fact_answers',
   'air_save_prepared_answers',
   'air_get_rules_notice',
-  'air_dismiss_rules_notice',
+  'air_ask_screening_questions',
+  'air_postpone_rules_notice',
+  'air_recheck_tier',
   'air_list_project_decisions',
   'air_record_project_decision',
   'air_get_assessment_stages',
@@ -63,7 +65,7 @@ export const MCP_AIR_STDIO_SESSION_TOOL_NAMES = [
   'air_sign_out',
 ] as const satisfies ReadonlyArray<string>
 
-export const MCP_AIR_STDIO_SESSION_TOOL_COUNT = 43 as const
+export const MCP_AIR_STDIO_SESSION_TOOL_COUNT = 45 as const
 
 export const MCP_AIR_EXPECTED_PROMPT_NAMES = [
   'run-assessment-workflow',

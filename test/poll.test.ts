@@ -79,24 +79,28 @@ describe('pollUntilAssessmentReady', () => {
 })
 
 describe('currentStageLabel', () => {
-  it('returns the running stage label when a later stage is running', () => {
+  it('says the running step and its place in the pipeline', () => {
     expect(
       currentStageLabel([
-        { stageName: 'ingest', label: 'Read the project summary', status: 'completed' },
-        { stageName: 'themes', label: 'Check each risk theme', status: 'running' },
-        { stageName: 'report', label: 'Write the report', status: 'pending' },
+        { stageName: 'stage_a', label: 'Reading the documents', step: 1, stepCount: 12, status: 'completed' },
+        { stageName: 'stage_c', label: 'Checking each risk theme', step: 4, stepCount: 12, status: 'running' },
       ]),
-    ).toBe('Check each risk theme')
+    ).toBe('Step 4 of 12: Checking each risk theme')
   })
 
-  it('returns the last completed label when nothing is running', () => {
+  it('says the last completed step when nothing is running', () => {
     expect(
       currentStageLabel([
-        { stageName: 'ingest', label: 'Read the project summary', status: 'completed' },
-        { stageName: 'themes', label: 'Check each risk theme', status: 'completed' },
-        { stageName: 'skip_check', label: 'Skip a check that does not apply', status: 'skipped' },
-        { stageName: 'report', label: 'Write the report', status: 'pending' },
+        { stageName: 'stage_a', label: 'Reading the documents', step: 1, stepCount: 12, status: 'completed' },
+        { stageName: 'stage_c', label: 'Checking each risk theme', step: 4, stepCount: 12, status: 'completed' },
+        { stageName: 'overlay', label: 'Applying the controls', step: 8, stepCount: 12, status: 'skipped' },
       ]),
-    ).toBe('Check each risk theme')
+    ).toBe('Step 4 of 12: Checking each risk theme')
+  })
+
+  it('fails on a stage row without its step', () => {
+    expect(() =>
+      currentStageLabel([{ stageName: 'lens', label: 'EU AI Act tiering (legacy)', step: null, stepCount: 12, status: 'running' }]),
+    ).toThrow('Assessment stage is missing its label or step')
   })
 })

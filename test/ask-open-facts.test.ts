@@ -7,459 +7,423 @@ import type { IntegratorApiClient } from '../src/client/integrator-api.js'
 import { createAirMcpServer } from '../src/server.js'
 
 const ASSESSMENT_PID = 'pasm_ask'
+const PROJECT_PID = 'prj_ask'
+const JUSTIFICATION = 'Answered in the AIR question form.'
 const FORM_MESSAGE =
-  'Answer these questions so AIR can set the EU AI Act tier. Suggestions come from your code; change any that are wrong. Choose "Not sure" if you do not know; that question stays open.'
-const FORM_JUSTIFICATION = 'Answered in the AIR question form.'
+  'AIR needs these answers to set the EU AI Act tier. "Not sure" leaves a question open.'
+const SUGGESTED_MESSAGE =
+  'AIR needs these answers to set the EU AI Act tier. Some answers are suggested from your code; change any that are wrong. "Not sure" leaves a question open.'
+const DETAIL_MESSAGE = 'A few details about what you ticked. "Not sure" leaves a question open.'
 
-type OpenFactsBody = Record<string, unknown>
+const EMPLOYMENT = 'data_governance.is_employment_use_case'
+const SCORING = 'data_governance.is_social_scoring'
+const RIGHTS = 'operational_safety_monitoring.impacts_rights'
+const DATA = 'data_governance.data_category'
+
+const employment = {
+  factPath: EMPLOYMENT,
+  question: 'How is the system used for jobs or workers? Choose all that apply.',
+  help: 'Hiring is high-risk.',
+  valueKind: 'array',
+  suggestFromCode: false,
+  options: [
+    { value: 'recruitment_selection', label: 'Recruitment or selection' },
+    { value: 'termination', label: 'Ending employment' },
+  ],
+}
+const scoring = {
+  factPath: SCORING,
+  question: 'Does the system score people?',
+  help: 'Social scoring can be prohibited.',
+  valueKind: 'boolean',
+  suggestFromCode: false,
+}
+const rights = {
+  factPath: RIGHTS,
+  question: 'Can the output harm people’s rights?',
+  help: 'A rights impact keeps it high-risk.',
+  valueKind: 'boolean',
+  suggestFromCode: false,
+}
+const data = {
+  factPath: DATA,
+  question: 'What types of data does the system process?',
+  help: 'Biometric data starts the biometric checks.',
+  valueKind: 'array',
+  suggestFromCode: true,
+  options: [
+    { value: 'facial_images', label: 'Facial images' },
+    { value: 'other', label: 'Other' },
+  ],
+}
+const groups = [
+  { id: 'jobs', label: 'Hiring or managing workers', factPaths: [EMPLOYMENT] },
+  { id: 'social_scoring', label: 'Scoring people', factPaths: [SCORING] },
+]
 
 const tier = (value: string, final: boolean) => ({
   value,
   displayName: value,
-  description: `${value} tier`,
+  description: value,
   final,
 })
 
-const openFactsBody = (
+const body = (
   openFacts: ReadonlyArray<Record<string, unknown>>,
-  answerConflicts: ReadonlyArray<Record<string, unknown>> = [],
-  tierValue = 'HIGH',
-): OpenFactsBody => ({
+  options: {
+    readonly screeningGroups?: ReadonlyArray<Record<string, unknown>>
+    readonly answerConflicts?: ReadonlyArray<Record<string, unknown>>
+    readonly tierValue?: string
+  } = {},
+) => ({
   assessmentPid: ASSESSMENT_PID,
   openFacts,
-  answerConflicts,
-  euAiActTier: { available: true, tier: tier(tierValue, openFacts.length === 0 && answerConflicts.length === 0) },
+  screeningGroups: options.screeningGroups ?? [],
+  answerConflicts: options.answerConflicts ?? [],
+  euAiActTier: {
+    available: true,
+    tier: tier(options.tierValue ?? 'NA', openFacts.length === 0),
+  },
 })
 
-const booleanFact = (factPath: string, question = `Question ${factPath}`, help = `Help ${factPath}`) => ({
-  factPath,
-  question,
-  help,
-  valueKind: 'boolean',
-})
-
-const arrayFact = (
-  factPath: string,
-  options: ReadonlyArray<{ value: string; label: string }>,
-  question = `Question ${factPath}`,
-  help = `Help ${factPath}`,
-) => ({
-  factPath,
-  question,
-  help,
-  valueKind: 'array',
-  options,
-})
-
-const booleanConflict = (
-  factPath: string,
-  keptValue: boolean | null,
-  scanValue: boolean | null,
-  excerpts: readonly string[],
-  question = `Question ${factPath}`,
-  help = `Help ${factPath}`,
-) => ({
-  ...booleanFact(factPath, question, help),
-  keptValue,
-  scanValue,
-  excerpts,
-})
-
-const resultJson = (result: Awaited<ReturnType<Client['callTool']>>) => {
-  const content = result.content as ReadonlyArray<{ type: string; text?: string }>
-  return {
-    isError: result.isError === true,
-    payload: JSON.parse(content.map((part) => part.text ?? '').join('')) as Record<string, unknown>,
+type Elicit = {
+  readonly message: string
+  readonly requestedSchema?: {
+    readonly properties: Record<string, Record<string, unknown>>
+    readonly required?: readonly string[]
   }
 }
 
-const connect = async (
-  api: IntegratorApiClient,
-  options: {
-    readonly elicitation?: boolean
-    readonly onElicit?: (params: {
-      readonly message: string
-      readonly requestedSchema?: {
-        readonly properties: Record<string, unknown>
-        readonly required?: readonly string[]
-      }
-    }) => { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, unknown> }
-  } = {},
-) => {
+type Answer = { action: 'accept' | 'decline'; content?: Record<string, unknown> }
+
+const connect = async (api: IntegratorApiClient, answer?: (page: number) => Answer) => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const server = createAirMcpServer(
     { apiUrl: 'http://localhost:4001', apiKey: 'test-key' },
     { api },
   )
   const client = new Client(
-    { name: 'ask-open-facts-test', version: '1.0.0' },
-    options.elicitation === true ? { capabilities: { elicitation: {} } } : {},
+    { name: 'ask-test', version: '1.0.0' },
+    answer === undefined ? {} : { capabilities: { elicitation: {} } },
   )
-  if (options.onElicit !== undefined) {
-    client.setRequestHandler(ElicitRequestSchema, (request) => options.onElicit?.(request.params) ?? {
-      action: 'cancel' as const,
+  const pages: Elicit[] = []
+  if (answer !== undefined) {
+    client.setRequestHandler(ElicitRequestSchema, (request) => {
+      pages.push(request.params as unknown as Elicit)
+      return answer(pages.length)
     })
   }
   await server.connect(serverTransport)
   await client.connect(clientTransport)
-  return client
+  return { client, pages }
 }
 
-const stubApi = (
-  listBody: OpenFactsBody,
-  submitBody: OpenFactsBody = listBody,
-) => {
-  const listOpenFacts = vi.fn().mockResolvedValue(listBody)
-  const submitFactAnswers = vi.fn().mockResolvedValue(submitBody)
-  const api = { listOpenFacts, submitFactAnswers } as unknown as IntegratorApiClient
-  return { api, listOpenFacts, submitFactAnswers }
+const call = async (client: Client, name: string, args: Record<string, unknown>) => {
+  const result = await client.callTool({ name, arguments: args })
+  const text = (result.content as ReadonlyArray<{ text?: string }>)
+    .map((part) => part.text ?? '')
+    .join('')
+  const isError = result.isError === true
+  return {
+    isError,
+    text,
+    payload: isError ? {} : (JSON.parse(text) as Record<string, unknown>),
+  }
 }
 
-const domainOptions = [
-  { value: 'employment', label: 'Employment' },
-  { value: 'credit', label: 'Credit' },
-]
+const api = (list: unknown, ...submits: unknown[]) => {
+  const submitFactAnswers = vi.fn()
+  for (const submit of submits) submitFactAnswers.mockResolvedValueOnce(submit)
+  const listOpenFacts = vi.fn().mockResolvedValue(list)
+  return {
+    stub: { listOpenFacts, submitFactAnswers } as unknown as IntegratorApiClient,
+    submitFactAnswers,
+  }
+}
+
+const sent = (...answers: ReadonlyArray<readonly [string, unknown]>) =>
+  answers.map(([factPath, value]) => ({ factPath, value, justification: JUSTIFICATION }))
+
+const accept = (content: Record<string, unknown>): Answer => ({ action: 'accept', content })
 
 describe('air_ask_open_facts', () => {
-  it('builds one form for a boolean and a list, with suggestion defaults', async () => {
-    let asked:
-      | {
-          message: string
-          requestedSchema?: { properties: Record<string, unknown>; required?: readonly string[] }
-        }
-      | undefined
-    const { api, submitFactAnswers } = stubApi(
-      openFactsBody([
-        booleanFact('facts.decides', 'Does it decide?', 'It can raise the tier.'),
-        arrayFact('facts.domains', domainOptions, 'Which domains?', 'The domain can change the tier.'),
-        booleanFact('facts.gap', 'Is there a gap?', 'A gap stays open.'),
-      ]),
+  it('asks the checklist first and answers every line not ticked as no', async () => {
+    const { stub, submitFactAnswers } = api(
+      body([employment, scoring], { screeningGroups: groups }),
+      body([], { tierValue: 'MINIMAL' }),
     )
-    const client = await connect(api, {
-      elicitation: true,
-      onElicit: (params) => {
-        asked = params
-        return { action: 'decline' }
-      },
-    })
+    const { client, pages } = await connect(stub, () => accept({ checklist: ['none'] }))
 
-    await client.callTool({
-      name: 'air_ask_open_facts',
-      arguments: {
-        assessmentPid: ASSESSMENT_PID,
-        proposedAnswers: [
-          { factPath: 'facts.decides', value: true, reason: 'the scorer ranks applicants' },
-          {
-            factPath: 'facts.domains',
-            value: ['employment', 'credit'],
-            reason: 'both routes are present',
-          },
-          { factPath: 'facts.gap', value: null, reason: 'the code does not say' },
+    const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
+
+    expect(pages).toHaveLength(1)
+    expect(pages[0]?.message).toBe(FORM_MESSAGE)
+    expect(pages[0]?.requestedSchema?.properties.checklist).toEqual({
+      type: 'array',
+      title: 'Does the system do any of these? Tick all that apply.',
+      minItems: 1,
+      items: {
+        anyOf: [
+          { const: 'jobs', title: 'Hiring or managing workers' },
+          { const: 'social_scoring', title: 'Scoring people' },
+          { const: 'none', title: 'None of these' },
+          { const: 'unsure', title: 'Not sure about some — ask me one by one' },
         ],
       },
     })
+    expect(submitFactAnswers.mock.calls).toEqual([
+      [ASSESSMENT_PID, sent([EMPLOYMENT, []], [SCORING, false])],
+    ])
+    expect(payload).toMatchObject({ answered: 2, openFactsRemaining: 0, notSureFactPaths: [] })
+    expect(payload.nextStep).toBeUndefined()
+  })
 
-    expect(asked?.message).toBe(FORM_MESSAGE)
-    expect(asked?.requestedSchema?.properties['facts.decides']).toEqual({
-      type: 'string',
-      title: 'Does it decide?',
-      description:
-        'It can raise the tier. Suggested from your code: Yes (the scorer ranks applicants)',
-      enum: ['yes', 'no', 'not_sure'],
-      enumNames: ['Yes', 'No', 'Not sure'],
-      default: 'yes',
-    })
-    expect(asked?.requestedSchema?.properties['facts.domains']).toEqual({
+  it('answers a ticked yes/no line yes and asks a ticked list line on a second page', async () => {
+    const { stub, submitFactAnswers } = api(
+      body([employment, scoring], { screeningGroups: groups }),
+      body([employment], { screeningGroups: [groups[0]!] }),
+      body([], { tierValue: 'HIGH' }),
+    )
+    const { client, pages } = await connect(stub, (page) =>
+      page === 1
+        ? accept({ checklist: ['jobs', 'social_scoring'] })
+        : accept({ [EMPLOYMENT]: ['recruitment_selection'] }),
+    )
+
+    await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
+
+    expect(pages.map((page) => page.message)).toEqual([FORM_MESSAGE, DETAIL_MESSAGE])
+    expect(pages[1]?.requestedSchema?.properties[EMPLOYMENT]).toEqual({
       type: 'array',
-      title: 'Which domains?',
-      description:
-        'The domain can change the tier. Suggested from your code: Employment, Credit (both routes are present)',
+      title: employment.question,
+      description: employment.help,
+      minItems: 1,
       items: {
         anyOf: [
-          { const: 'employment', title: 'Employment' },
-          { const: 'credit', title: 'Credit' },
+          { const: 'recruitment_selection', title: 'Recruitment or selection' },
+          { const: 'termination', title: 'Ending employment' },
+          { const: 'none', title: 'None of these' },
           { const: 'not_sure', title: 'Not sure' },
         ],
       },
-      default: ['employment', 'credit'],
     })
-    expect(asked?.requestedSchema?.properties['facts.gap']).toEqual({
-      type: 'string',
-      title: 'Is there a gap?',
-      description: 'A gap stays open. Suggested from your code: Not sure (the code does not say)',
-      enum: ['yes', 'no', 'not_sure'],
-      enumNames: ['Yes', 'No', 'Not sure'],
-      default: 'not_sure',
-    })
+    expect(submitFactAnswers.mock.calls).toEqual([
+      [ASSESSMENT_PID, sent([SCORING, true])],
+      [ASSESSMENT_PID, sent([EMPLOYMENT, ['recruitment_selection']])],
+    ])
+  })
+
+  it('refuses a list answer with no choice instead of reading it as none', async () => {
+    const { stub, submitFactAnswers } = api(body([employment], { screeningGroups: [groups[0]!] }))
+    const { client } = await connect(stub, (page) =>
+      page === 1 ? accept({ checklist: ['jobs'] }) : accept({ [EMPLOYMENT]: [] }),
+    )
+
+    const result = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
+
+    expect(result.isError).toBe(true)
+    expect(result.text).toContain(`${EMPLOYMENT} must NOT have fewer than 1 items`)
     expect(submitFactAnswers).not.toHaveBeenCalled()
   })
 
-  it('describes a conflict with the kept answer as the default', async () => {
-    let properties: Record<string, { description?: string; default?: unknown }> = {}
-    const { api } = stubApi(
-      openFactsBody(
-        [],
-        [
-          booleanConflict(
-            'facts.review',
-            true,
-            false,
-            ['the model scores applicants'],
-            'Did a person review it?',
-            'Earlier answer differs.',
-          ),
-          {
-            ...arrayFact('facts.domains', domainOptions, 'Which domains?', 'Domain differs.'),
-            keptValue: ['employment'],
-            scanValue: ['credit'],
-            excerpts: [],
-          },
-          booleanConflict('facts.unknown', false, null, [], 'Was it unknown?', 'No excerpt.'),
-        ],
-      ),
-    )
-    const client = await connect(api, {
-      elicitation: true,
-      onElicit: (params) => {
-        properties = params.requestedSchema?.properties as typeof properties
-        return { action: 'cancel' }
-      },
-    })
+  it('refuses "None of these" ticked together with a line', async () => {
+    const { stub, submitFactAnswers } = api(body([employment, scoring], { screeningGroups: groups }))
+    const { client } = await connect(stub, () => accept({ checklist: ['none', 'jobs'] }))
 
-    await client.callTool({
-      name: 'air_ask_open_facts',
-      arguments: {
-        assessmentPid: ASSESSMENT_PID,
-        proposedAnswers: [{ factPath: 'facts.review', value: false, reason: 'looks like a no' }],
-      },
-    })
+    const result = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
-    expect(properties['facts.review']?.description).toBe(
-      'Earlier answer differs. Suggested from your code: No (looks like a no) You answered Yes before. This scan read No: "the model scores applicants"',
+    expect(result.isError).toBe(true)
+    expect(result.text).toContain(
+      'The checklist has "None of these" and other lines ticked. Ask it again.',
     )
-    expect(properties['facts.review']?.default).toBe('yes')
-    expect(properties['facts.domains']?.description).toBe(
-      'Domain differs. You answered Employment before. This scan read Credit.',
-    )
-    expect(properties['facts.domains']?.default).toEqual(['employment'])
-    expect(properties['facts.unknown']?.description).toBe(
-      'No excerpt. You answered No before. This scan read Not sure.',
-    )
+    expect(submitFactAnswers).not.toHaveBeenCalled()
   })
 
-  it('maps form answers and submits only those questions', async () => {
-    const list = openFactsBody([
-      booleanFact('facts.yes'),
-      booleanFact('facts.no'),
-      booleanFact('facts.unsure'),
-      arrayFact('facts.some', [
-        { value: 'alpha', label: 'Alpha' },
-        { value: 'beta', label: 'Beta' },
-      ]),
-      arrayFact('facts.none', [{ value: 'alpha', label: 'Alpha' }]),
-      arrayFact('facts.unsure_list', [{ value: 'alpha', label: 'Alpha' }]),
-      arrayFact('facts.mixed', [{ value: 'employment', label: 'Employment' }]),
-    ])
-    const submittedBody = openFactsBody([booleanFact('facts.later')], [], 'LIMITED')
-    const { api, listOpenFacts, submitFactAnswers } = stubApi(list, submittedBody)
-    const content = {
-      'facts.yes': 'yes',
-      'facts.no': 'no',
-      'facts.unsure': 'not_sure',
-      'facts.some': ['alpha', 'beta'],
-      'facts.none': [],
-      'facts.unsure_list': ['not_sure'],
-      'facts.mixed': ['employment', 'not_sure'],
-    }
-    const client = await connect(api, {
-      elicitation: true,
-      onElicit: () => ({ action: 'accept', content }),
-    })
-
-    const { isError, payload } = resultJson(
-      await client.callTool({ name: 'air_ask_open_facts', arguments: { assessmentPid: ASSESSMENT_PID } }),
+  it('asks each line one by one when the person is not sure about some', async () => {
+    const { stub, submitFactAnswers } = api(
+      body([employment, scoring], { screeningGroups: groups }),
+      body([], { tierValue: 'MINIMAL' }),
+    )
+    const { client, pages } = await connect(stub, (page) =>
+      page === 1
+        ? accept({ checklist: ['unsure'] })
+        : accept({ [EMPLOYMENT]: ['none'], [SCORING]: 'no' }),
     )
 
-    expect(isError).toBe(false)
-    expect(listOpenFacts).toHaveBeenCalledTimes(1)
-    expect(listOpenFacts).toHaveBeenCalledWith(ASSESSMENT_PID)
-    expect(submitFactAnswers).toHaveBeenCalledTimes(1)
-    expect(submitFactAnswers).toHaveBeenCalledWith(ASSESSMENT_PID, [
-      { factPath: 'facts.yes', value: true, justification: FORM_JUSTIFICATION },
-      { factPath: 'facts.no', value: false, justification: FORM_JUSTIFICATION },
-      { factPath: 'facts.unsure', value: null, justification: FORM_JUSTIFICATION },
-      { factPath: 'facts.some', value: ['alpha', 'beta'], justification: FORM_JUSTIFICATION },
-      { factPath: 'facts.none', value: [], justification: FORM_JUSTIFICATION },
-      { factPath: 'facts.unsure_list', value: null, justification: FORM_JUSTIFICATION },
-      { factPath: 'facts.mixed', value: null, justification: FORM_JUSTIFICATION },
+    await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
+
+    expect(Object.keys(pages[1]?.requestedSchema?.properties ?? {})).toEqual([EMPLOYMENT, SCORING])
+    expect(submitFactAnswers.mock.calls).toEqual([
+      [ASSESSMENT_PID, sent([EMPLOYMENT, []], [SCORING, false])],
     ])
-    expect(listOpenFacts.mock.invocationCallOrder[0]).toBeLessThan(
-      submitFactAnswers.mock.invocationCallOrder[0] ?? 0,
+  })
+
+  it('stops when every open question is "Not sure", and returns them to skip next time', async () => {
+    const { stub, submitFactAnswers } = api(
+      body([rights], { tierValue: 'HIGH' }),
+      body([rights], { tierValue: 'HIGH' }),
     )
-    expect(payload).toEqual({
-      assessmentPid: ASSESSMENT_PID,
-      answered: 7,
-      tier: tier('LIMITED', false),
+    const { client, pages } = await connect(stub, () => accept({ [RIGHTS]: 'not_sure' }))
+
+    const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
+
+    expect(pages).toHaveLength(1)
+    expect(submitFactAnswers.mock.calls).toEqual([[ASSESSMENT_PID, sent([RIGHTS, null])]])
+    expect(payload).toMatchObject({
       openFactsRemaining: 1,
-      answerConflictsRemaining: 0,
-      nextStep:
-        'More questions are open, and their answers can still change the tier. Call air_ask_open_facts again.',
+      notSureFactPaths: [RIGHTS],
+      stillOpen: [rights.question],
+    })
+    expect(payload.nextStep).toBeUndefined()
+  })
+
+  it('shows no form for questions already answered "Not sure"', async () => {
+    const { stub } = api(body([rights], { tierValue: 'HIGH' }))
+    const { client, pages } = await connect(stub, () => ({ action: 'decline' }))
+
+    const { payload } = await call(client, 'air_ask_open_facts', {
+      assessmentPid: ASSESSMENT_PID,
+      skipFactPaths: [RIGHTS],
+    })
+
+    expect(pages).toHaveLength(0)
+    expect(payload).toEqual({
+      assessmentPid: ASSESSMENT_PID,
+      tier: tier('HIGH', false),
+      openFactsRemaining: 1,
     })
   })
 
-  it('does not submit when the person declines the form', async () => {
-    const { api, submitFactAnswers } = stubApi(openFactsBody([booleanFact('facts.one')]))
-    const client = await connect(api, {
-      elicitation: true,
-      onElicit: () => ({ action: 'decline' }),
-    })
-
-    const { isError, payload } = resultJson(
-      await client.callTool({ name: 'air_ask_open_facts', arguments: { assessmentPid: ASSESSMENT_PID } }),
+  it('asks the follow-ups the checklist opened, in the same call', async () => {
+    const { stub, submitFactAnswers } = api(
+      body([scoring], { screeningGroups: [groups[1]!] }),
+      body([rights], { tierValue: 'HIGH' }),
+      body([], { tierValue: 'HIGH' }),
+    )
+    const { client, pages } = await connect(stub, (page) =>
+      page === 1 ? accept({ checklist: ['social_scoring'] }) : accept({ [RIGHTS]: 'yes' }),
     )
 
-    expect(isError).toBe(false)
-    expect(submitFactAnswers).not.toHaveBeenCalled()
-    expect(payload).toEqual({
+    const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
+
+    expect(pages.map((page) => Object.keys(page.requestedSchema?.properties ?? {}))).toEqual([
+      ['checklist'],
+      [RIGHTS],
+    ])
+    expect(submitFactAnswers.mock.calls).toEqual([
+      [ASSESSMENT_PID, sent([SCORING, true])],
+      [ASSESSMENT_PID, sent([RIGHTS, true])],
+    ])
+    expect(payload).toMatchObject({ answered: 2, openFactsRemaining: 0 })
+  })
+
+  it('refuses a suggestion for what the system is used for', async () => {
+    const { stub } = api(body([rights]))
+    const { client, pages } = await connect(stub, () => ({ action: 'decline' }))
+
+    const result = await call(client, 'air_ask_open_facts', {
       assessmentPid: ASSESSMENT_PID,
-      declined: true,
-      note: 'The person closed the form. Do not ask these questions again unless they ask.',
+      proposedAnswers: [{ factPath: RIGHTS, value: false, reason: 'It is a chat app.' }],
+    })
+
+    expect(result.isError).toBe(true)
+    expect(result.text).toContain(`"${rights.question}" must come from the person`)
+    expect(pages).toHaveLength(0)
+  })
+
+  it('starts a fact the code can show with its suggestion and says so', async () => {
+    const { stub } = api(body([data]), body([]))
+    const { client, pages } = await connect(stub, () => accept({ [DATA]: ['other'] }))
+
+    await call(client, 'air_ask_open_facts', {
+      assessmentPid: ASSESSMENT_PID,
+      proposedAnswers: [{ factPath: DATA, value: ['other'], reason: 'The prompt is chat text.' }],
+    })
+
+    expect(pages[0]?.message).toBe(SUGGESTED_MESSAGE)
+    expect(pages[0]?.requestedSchema?.properties[DATA]).toMatchObject({
+      default: ['other'],
+      description: `${data.help} Suggested from your code: Other (The prompt is chat text.)`,
     })
   })
 
-  it('returns the questions when the client cannot show a form', async () => {
-    const { api, submitFactAnswers } = stubApi(
-      openFactsBody(
-        [arrayFact('facts.domains', domainOptions, 'Which domains?', 'The domain can change the tier.')],
-        [
-          booleanConflict(
-            'facts.kept',
-            null,
-            true,
-            ['saw a score'],
-            'Did a person review it?',
-            'A review can lower the tier.',
-          ),
-        ],
-      ),
-    )
-    const client = await connect(api)
+  it('starts a conflict at the earlier answer and quotes what the scan read', async () => {
+    const conflict = {
+      ...scoring,
+      keptValue: false,
+      scanValue: true,
+      excerpts: ['We rank users by behaviour.'],
+    }
+    const { stub, submitFactAnswers } = api(body([], { answerConflicts: [conflict] }), body([]))
+    const { client, pages } = await connect(stub, () => accept({ [SCORING]: 'no' }))
 
-    const { isError, payload } = resultJson(
-      await client.callTool({
-        name: 'air_ask_open_facts',
-        arguments: {
-          assessmentPid: ASSESSMENT_PID,
-          proposedAnswers: [
-            { factPath: 'facts.domains', value: ['employment'], reason: 'hiring route' },
-          ],
-        },
-      }),
-    )
+    await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
-    expect(isError).toBe(false)
-    expect(submitFactAnswers).not.toHaveBeenCalled()
-    expect(payload).toEqual({
-      assessmentPid: ASSESSMENT_PID,
-      questions: [
-        {
-          factPath: 'facts.kept',
-          question: 'Did a person review it?',
-          help: 'A review can lower the tier.',
-          valueKind: 'boolean',
-          keptValue: null,
-          scanValue: true,
-          excerpts: ['saw a score'],
-        },
-        {
-          factPath: 'facts.domains',
-          question: 'Which domains?',
-          help: 'The domain can change the tier.',
-          valueKind: 'array',
-          options: domainOptions,
-          proposal: {
-            factPath: 'facts.domains',
-            value: ['employment'],
-            reason: 'hiring route',
-          },
-        },
+    expect(pages[0]?.requestedSchema?.properties[SCORING]).toEqual({
+      type: 'string',
+      title: scoring.question,
+      description: `${scoring.help} You answered No before. This scan read Yes: "We rank users by behaviour."`,
+      oneOf: [
+        { const: 'yes', title: 'Yes' },
+        { const: 'no', title: 'No' },
+        { const: 'not_sure', title: 'Not sure' },
       ],
-      nextStep:
-        'This client cannot show a form. Ask the person these questions in chat: use the question and help text, offer the options by label, and add "Not sure". Then call air_submit_fact_answers.',
+      default: 'no',
     })
+    expect(submitFactAnswers.mock.calls).toEqual([[ASSESSMENT_PID, sent([SCORING, false])]])
   })
 
-  it('asks only the first 10 questions, conflicts first', async () => {
-    const conflicts = Array.from({ length: 4 }, (_, index) =>
-      booleanConflict(`facts.conflict_${index}`, true, false, []),
-    )
-    const facts = Array.from({ length: 8 }, (_, index) => booleanFact(`facts.open_${index}`))
-    const expectedPaths = [
-      ...conflicts.map((row) => row.factPath),
-      ...facts.slice(0, 6).map((row) => row.factPath),
-    ]
-    let required: readonly string[] = []
-    const { api, submitFactAnswers } = stubApi(
-      openFactsBody(facts, conflicts),
-      openFactsBody([], [], 'MINIMAL'),
-    )
-    const client = await connect(api, {
-      elicitation: true,
-      onElicit: (params) => {
-        required = params.requestedSchema?.required ?? []
-        const content = Object.fromEntries(required.map((factPath) => [factPath, 'not_sure']))
-        return { action: 'accept', content }
-      },
-    })
+  it('saves nothing when the person closes the first page', async () => {
+    const { stub, submitFactAnswers } = api(body([employment, scoring], { screeningGroups: groups }))
+    const { client } = await connect(stub, () => ({ action: 'decline' }))
 
-    const { payload } = resultJson(
-      await client.callTool({ name: 'air_ask_open_facts', arguments: { assessmentPid: ASSESSMENT_PID } }),
-    )
+    const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
-    expect(required).toEqual(expectedPaths)
-    expect(required).toHaveLength(10)
-    expect(submitFactAnswers).toHaveBeenCalledWith(
-      ASSESSMENT_PID,
-      expectedPaths.map((factPath) => ({
-        factPath,
-        value: null,
-        justification: FORM_JUSTIFICATION,
-      })),
-    )
-    expect(payload).toEqual({
-      assessmentPid: ASSESSMENT_PID,
-      answered: 10,
-      tier: tier('MINIMAL', true),
-      openFactsRemaining: 0,
-      answerConflictsRemaining: 0,
-    })
-    expect(payload).not.toHaveProperty('nextStep')
-  })
-
-  it('reports a final tier when nothing is open', async () => {
-    let elicitCalls = 0
-    const { api, listOpenFacts, submitFactAnswers } = stubApi(openFactsBody([], [], 'MINIMAL'))
-    const client = await connect(api, {
-      elicitation: true,
-      onElicit: () => {
-        elicitCalls += 1
-        return { action: 'accept', content: {} }
-      },
-    })
-
-    const { isError, payload } = resultJson(
-      await client.callTool({ name: 'air_ask_open_facts', arguments: { assessmentPid: ASSESSMENT_PID } }),
-    )
-
-    expect(isError).toBe(false)
-    expect(elicitCalls).toBe(0)
-    expect(listOpenFacts).toHaveBeenCalledTimes(1)
     expect(submitFactAnswers).not.toHaveBeenCalled()
-    expect(payload).toEqual({
-      assessmentPid: ASSESSMENT_PID,
-      tier: tier('MINIMAL', true),
-      openFactsRemaining: 0,
-      note: 'No open questions. The tier is final.',
+    expect(payload).toMatchObject({ declined: true, answered: 0 })
+  })
+
+  it('returns the checklist and questions when the client cannot show a form', async () => {
+    const { stub, submitFactAnswers } = api(body([employment, scoring], { screeningGroups: groups }))
+    const { client } = await connect(stub)
+
+    const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
+
+    expect(payload.checklist).toEqual(groups)
+    expect(
+      (payload.questions as ReadonlyArray<{ factPath: string }>).map((question) => question.factPath),
+    ).toEqual([EMPLOYMENT, SCORING])
+    expect(submitFactAnswers).not.toHaveBeenCalled()
+  })
+})
+
+describe('air_ask_screening_questions', () => {
+  it('holds the checklist answers for after the scan starts and saves nothing', async () => {
+    const listScreeningQuestions = vi
+      .fn()
+      .mockResolvedValue({ screeningGroups: groups, questions: [employment, scoring] })
+    const savePreparedAnswers = vi.fn()
+    const stub = { listScreeningQuestions, savePreparedAnswers } as unknown as IntegratorApiClient
+    const { client } = await connect(stub, (page) =>
+      page === 1
+        ? accept({ checklist: ['jobs'] })
+        : accept({ [EMPLOYMENT]: ['recruitment_selection', 'termination'] }),
+    )
+
+    const { payload } = await call(client, 'air_ask_screening_questions', {
+      projectPid: PROJECT_PID,
     })
+
+    expect(listScreeningQuestions).toHaveBeenCalledWith(PROJECT_PID)
+    expect(savePreparedAnswers).not.toHaveBeenCalled()
+    expect(payload.answers).toEqual([
+      { factPath: SCORING, value: false, question: scoring.question, answer: 'No' },
+      {
+        factPath: EMPLOYMENT,
+        value: ['recruitment_selection', 'termination'],
+        question: employment.question,
+        answer: 'Recruitment or selection, Ending employment',
+      },
+    ])
   })
 })

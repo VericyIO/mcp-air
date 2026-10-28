@@ -266,9 +266,22 @@ export class IntegratorApiClient {
     )
   }
 
-  dismissRulesNotice(projectPid: string) {
+  postponeRulesNotice(projectPid: string) {
     return this.request<Record<string, unknown>>(
-      `/projects/${encodeURIComponent(projectPid)}/rules-notice/dismiss`,
+      `/projects/${encodeURIComponent(projectPid)}/rules-notice/postpone`,
+      { method: 'POST', body: {} },
+    )
+  }
+
+  listScreeningQuestions(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/screening-questions`,
+    )
+  }
+
+  recheckTier(assessmentPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/assessments/${encodeURIComponent(assessmentPid)}/eu-ai-act-tier/recheck`,
       { method: 'POST', body: {} },
     )
   }

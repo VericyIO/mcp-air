@@ -1,8 +1,31 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
+import {
+  MCP_AIR_ASK_SCREENING_QUESTIONS_DESCRIPTION,
+  MCP_AIR_CHECKLIST_FIELD,
+  MCP_AIR_FACT_FORM_DETAIL_MESSAGE,
+  MCP_AIR_FACT_FORM_MESSAGE,
+  MCP_AIR_SCREENING_DECLINED_NOTE,
+  MCP_AIR_SCREENING_DONE_NOTE,
+  MCP_AIR_SCREENING_HOLD_NEXT_STEP,
+  MCP_AIR_SCREENING_NO_FORM_NEXT_STEP,
+} from '../config.js'
+import { supportsElicitation } from '../elicitation.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
+import {
+  answerLabel,
+  askPage,
+  checklistField,
+  questionField,
+  readChecklist,
+  readQuestion,
+  readQuestionAnswer,
+  readScreeningGroups,
+  type FactAnswer,
+} from '../forms/fact-form.js'
 import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
 const readOnly = {
@@ -22,6 +45,9 @@ const preparedAnswer = z.object({
   value: z.union([z.boolean(), z.array(z.string()), z.null()]),
   justification: z.string().optional(),
 })
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClient) => {
   server.registerTool(
@@ -43,11 +69,89 @@ export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClien
   )
 
   server.registerTool(
+    'air_ask_screening_questions',
+    {
+      title: MCP_AIR_TOOL_TITLES.air_ask_screening_questions,
+      description: MCP_AIR_ASK_SCREENING_QUESTIONS_DESCRIPTION,
+      inputSchema: { projectPid: z.string() },
+      annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_ask_screening_questions },
+    },
+    async ({ projectPid }) => {
+      try {
+        const raw = await api.listScreeningQuestions(projectPid)
+        if (!isRecord(raw) || !Array.isArray(raw.questions)) {
+          throw new Error('Screening questions response is missing questions')
+        }
+        const groups = readScreeningGroups(raw.screeningGroups)
+        const questions = raw.questions.map(readQuestion)
+        if (groups.length === 0) {
+          return toolJsonResult({ projectPid, answers: [], note: MCP_AIR_SCREENING_DONE_NOTE })
+        }
+        if (!supportsElicitation(server)) {
+          return toolJsonResult({
+            projectPid,
+            checklist: groups,
+            questions,
+            nextStep: MCP_AIR_SCREENING_NO_FORM_NEXT_STEP,
+          })
+        }
+
+        const questionsByPath = new Map(questions.map((question) => [question.factPath, question]))
+        const content = await askPage(server, MCP_AIR_FACT_FORM_MESSAGE, {
+          [MCP_AIR_CHECKLIST_FIELD]: checklistField(groups),
+        })
+        if (content === null) {
+          return toolJsonResult({ projectPid, declined: true, note: MCP_AIR_SCREENING_DECLINED_NOTE })
+        }
+        const checklist = readChecklist(groups, questionsByPath, content[MCP_AIR_CHECKLIST_FIELD])
+        const answers: FactAnswer[] = [...checklist.answers]
+        if (checklist.next.length > 0) {
+          const detail: ElicitRequestFormParams['requestedSchema']['properties'] = {}
+          for (const question of checklist.next) detail[question.factPath] = questionField(question)
+          const details = await askPage(server, MCP_AIR_FACT_FORM_DETAIL_MESSAGE, detail)
+          if (details === null) {
+            return toolJsonResult({ projectPid, declined: true, note: MCP_AIR_SCREENING_DECLINED_NOTE })
+          }
+          for (const question of checklist.next) {
+            answers.push({
+              factPath: question.factPath,
+              value: readQuestionAnswer(question, details[question.factPath]),
+            })
+          }
+        }
+
+        const question = (factPath: string) => {
+          const found = questionsByPath.get(factPath)
+          if (found === undefined) throw new Error(`Screening fact ${factPath} has no question`)
+          return found
+        }
+        return toolJsonResult({
+          projectPid,
+          answers: answers
+            .filter((answer) => answer.value !== null)
+            .map((answer) => ({
+              factPath: answer.factPath,
+              value: answer.value,
+              question: question(answer.factPath).question,
+              answer: answerLabel(question(answer.factPath), answer.value),
+            })),
+          notSure: answers
+            .filter((answer) => answer.value === null)
+            .map((answer) => question(answer.factPath).question),
+          nextStep: MCP_AIR_SCREENING_HOLD_NEXT_STEP,
+        })
+      } catch (error) {
+        return toolErrorResult(error, 'air_ask_screening_questions')
+      }
+    },
+  )
+
+  server.registerTool(
     'air_save_prepared_answers',
     {
       title: MCP_AIR_TOOL_TITLES.air_save_prepared_answers,
       description:
-        'Call this right after air_start_assessment, before the facts stage. It does not recompute the tier. The scan applies the answers when it extracts facts. Requires assessments:write.',
+        'Save the checklist answers right after air_start_assessment. They are kept on the project and applied when the scan reads its facts; a scan that reads a different value from the documents raises it as a conflict. Refused once the scan has read its facts. It does not recompute the tier. Requires assessments:write.',
       inputSchema: {
         assessmentPid: z.string(),
         answers: z.array(preparedAnswer).min(1),
@@ -68,7 +172,7 @@ export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClien
     {
       title: MCP_AIR_TOOL_TITLES.air_get_rules_notice,
       description:
-        'due means the last completed scan used an older catalog or tier method than the one AIR uses now, and the person has not postponed this version. Say so in one line. Do not decide the version yourself. Requires projects:read.',
+        'due is true when the latest completed scan used older AIR EU AI Act rules and nobody has said later to the current ones. lastCompleted.tier is the stored tier and lastCompleted.tierUnderCurrentRules is what the same facts give now. postponed says when someone said later to the current rules. Do not decide the version yourself. Requires projects:read.',
       inputSchema: { projectPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_rules_notice },
     },
@@ -82,19 +186,37 @@ export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClien
   )
 
   server.registerTool(
-    'air_dismiss_rules_notice',
+    'air_postpone_rules_notice',
     {
-      title: MCP_AIR_TOOL_TITLES.air_dismiss_rules_notice,
+      title: MCP_AIR_TOOL_TITLES.air_postpone_rules_notice,
       description:
-        'The person said later. Stores the current rules version. The notice returns only when AIR moves past it. Requires projects:write.',
+        'The person said later to the current AIR rules. Records who and when. The notice returns when the rules move past this version. Refused when nothing is due. Requires projects:write.',
       inputSchema: { projectPid: z.string() },
-      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_dismiss_rules_notice },
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_postpone_rules_notice },
     },
     async ({ projectPid }) => {
       try {
-        return toolJsonResult(await api.dismissRulesNotice(projectPid))
+        return toolJsonResult(await api.postponeRulesNotice(projectPid))
       } catch (error) {
-        return toolErrorResult(error, 'air_dismiss_rules_notice')
+        return toolErrorResult(error, 'air_postpone_rules_notice')
+      }
+    },
+  )
+
+  server.registerTool(
+    'air_recheck_tier',
+    {
+      title: MCP_AIR_TOOL_TITLES.air_recheck_tier,
+      description:
+        'Re-check a scan\'s EU AI Act tier under the current AIR rules from the facts it already holds. Reads no documents and spends no credit. Returns previousTier, the new tier, and the questions that can still change it. Requires assessments:write.',
+      inputSchema: { assessmentPid: z.string() },
+      annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_recheck_tier },
+    },
+    async ({ assessmentPid }) => {
+      try {
+        return toolJsonResult(await api.recheckTier(assessmentPid))
+      } catch (error) {
+        return toolErrorResult(error, 'air_recheck_tier')
       }
     },
   )
