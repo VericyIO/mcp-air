@@ -63,7 +63,7 @@ export const MCP_AIR_SERVER_NAME = 'air-mcp-server' as const
 export const MCP_AIR_SERVER_TITLE = 'Thalus AIR' as const
 
 /** MCP server semver. */
-export const MCP_AIR_SERVER_VERSION = '1.4.0' as const
+export const MCP_AIR_SERVER_VERSION = '1.5.0' as const
 
 /** Default page size for list tools when the caller omits `limit`. */
 export const MCP_AIR_DEFAULT_LIST_LIMIT = 20 as const
