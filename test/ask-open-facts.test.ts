@@ -9,11 +9,9 @@ import { createAirMcpServer } from '../src/server.js'
 const ASSESSMENT_PID = 'pasm_ask'
 const PROJECT_PID = 'prj_ask'
 const JUSTIFICATION = 'Answered in the AIR question form.'
-const FORM_MESSAGE =
-  'AIR needs these answers to set the EU AI Act tier. "Not sure" leaves a question open.'
-const SUGGESTED_MESSAGE =
-  'AIR needs these answers to set the EU AI Act tier. Some answers are suggested from your code; change any that are wrong. "Not sure" leaves a question open.'
-const DETAIL_MESSAGE = 'A few details about what you ticked. "Not sure" leaves a question open.'
+const FORM_MESSAGE = 'AIR needs these answers to set the EU AI Act tier.'
+const SUGGESTED_MESSAGE = 'AIR needs these answers. Check the ones suggested from your code.'
+const DETAIL_MESSAGE = 'A few details about what you ticked.'
 
 const EMPLOYMENT = 'data_governance.is_employment_use_case'
 const SCORING = 'data_governance.is_social_scoring'
@@ -160,14 +158,14 @@ describe('air_ask_open_facts', () => {
     expect(pages[0]?.message).toBe(FORM_MESSAGE)
     expect(pages[0]?.requestedSchema?.properties.checklist).toEqual({
       type: 'array',
-      title: 'Does the system do any of these? Tick all that apply.',
+      title: 'Does the system do any of these?',
       minItems: 1,
       items: {
         anyOf: [
           { const: 'jobs', title: 'Hiring or managing workers' },
           { const: 'social_scoring', title: 'Scoring people' },
           { const: 'none', title: 'None of these' },
-          { const: 'unsure', title: 'Not sure about some — ask me one by one' },
+          { const: 'unsure', title: 'Not sure about some — ask one by one' },
         ],
       },
     })

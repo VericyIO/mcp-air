@@ -111,21 +111,19 @@ export const MCP_AIR_FACT_ANSWER_NONE_LABEL = 'None of these' as const
 
 /** Form field key of the checklist; fact paths always contain a dot, so it cannot collide. */
 export const MCP_AIR_CHECKLIST_FIELD = 'checklist' as const
-export const MCP_AIR_CHECKLIST_TITLE =
-  'Does the system do any of these? Tick all that apply.' as const
+export const MCP_AIR_CHECKLIST_TITLE = 'Does the system do any of these?' as const
 export const MCP_AIR_CHECKLIST_UNSURE = 'unsure' as const
-export const MCP_AIR_CHECKLIST_UNSURE_LABEL = 'Not sure about some — ask me one by one' as const
+export const MCP_AIR_CHECKLIST_UNSURE_LABEL = 'Not sure about some — ask one by one' as const
 
 export const MCP_AIR_NO_OPEN_QUESTIONS_NOTE = 'No open questions. The tier is final.' as const
 
-export const MCP_AIR_FACT_FORM_MESSAGE =
-  'AIR needs these answers to set the EU AI Act tier. "Not sure" leaves a question open.' as const
+/** Page messages stay short: Claude Code shows them on one line and cuts the rest. */
+export const MCP_AIR_FACT_FORM_MESSAGE = 'AIR needs these answers to set the EU AI Act tier.' as const
 
 export const MCP_AIR_FACT_FORM_SUGGESTED_MESSAGE =
-  'AIR needs these answers to set the EU AI Act tier. Some answers are suggested from your code; change any that are wrong. "Not sure" leaves a question open.' as const
+  'AIR needs these answers. Check the ones suggested from your code.' as const
 
-export const MCP_AIR_FACT_FORM_DETAIL_MESSAGE =
-  'A few details about what you ticked. "Not sure" leaves a question open.' as const
+export const MCP_AIR_FACT_FORM_DETAIL_MESSAGE = 'A few details about what you ticked.' as const
 
 export const MCP_AIR_FACT_FORM_JUSTIFICATION = 'Answered in the AIR question form.' as const
 
