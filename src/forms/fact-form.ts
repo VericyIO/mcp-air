@@ -1,5 +1,5 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ElicitRequestFormParams } from "@modelcontextprotocol/sdk/types.js";
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js'
 
 import {
   factConflictLine,
@@ -15,7 +15,8 @@ import {
   MCP_AIR_FACT_ANSWER_NOT_SURE_LABEL,
   MCP_AIR_FACT_ANSWER_YES,
   MCP_AIR_FACT_ANSWER_YES_LABEL,
-} from "../config.js";
+  MCP_AIR_FACT_FORM_TIMEOUT_MS,
+} from '../config.js'
 
 /**
  * The form a person answers EU AI Act questions in. Page one is one checklist of what the
@@ -23,181 +24,165 @@ import {
  * Field keys are fact paths, which the person never sees: each field shows its question.
  */
 
-export type FactOption = { readonly value: string; readonly label: string };
+export type FactOption = { readonly value: string; readonly label: string }
 
 export type Question =
   | {
-      readonly factPath: string;
-      readonly question: string;
-      readonly help: string;
-      readonly valueKind: "boolean";
-      readonly suggestFromCode: boolean;
+      readonly factPath: string
+      readonly question: string
+      readonly help: string
+      readonly valueKind: 'boolean'
+      readonly suggestFromCode: boolean
     }
   | {
-      readonly factPath: string;
-      readonly question: string;
-      readonly help: string;
-      readonly valueKind: "array";
-      readonly suggestFromCode: boolean;
-      readonly options: readonly FactOption[];
-    };
+      readonly factPath: string
+      readonly question: string
+      readonly help: string
+      readonly valueKind: 'array'
+      readonly suggestFromCode: boolean
+      readonly options: readonly FactOption[]
+    }
 
 export type ScreeningGroup = {
-  readonly id: string;
-  readonly label: string;
-  readonly factPaths: readonly string[];
-};
+  readonly id: string
+  readonly label: string
+  readonly factPaths: readonly string[]
+}
 
-export type FactValue = boolean | readonly string[] | null;
+export type FactValue = boolean | readonly string[] | null
 
 export type FactAnswer = {
-  readonly factPath: string;
-  readonly value: FactValue;
-};
+  readonly factPath: string
+  readonly value: FactValue
+}
 
 /** A field's starting value and the line that explains it: a suggestion or an earlier answer. */
 export type FieldContext = {
-  readonly defaultValue: FactValue;
-  readonly line: string;
-};
+  readonly defaultValue: FactValue
+  readonly line: string
+}
 
-type FormProperty =
-  ElicitRequestFormParams["requestedSchema"]["properties"][string];
+type FormProperty = ElicitRequestFormParams['requestedSchema']['properties'][string]
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const readString = (row: Record<string, unknown>, key: string): string => {
-  const value = row[key];
-  if (typeof value !== "string") {
-    const factPath =
-      typeof row.factPath === "string" ? row.factPath : "(unknown fact)";
-    throw new Error(`Question ${factPath} is missing ${key}`);
+  const value = row[key]
+  if (typeof value !== 'string') {
+    const factPath = typeof row.factPath === 'string' ? row.factPath : '(unknown fact)'
+    throw new Error(`Question ${factPath} is missing ${key}`)
   }
-  return value;
-};
+  return value
+}
 
 export const readQuestion = (raw: unknown): Question => {
   if (!isRecord(raw)) {
-    throw new Error("Question is not an object");
+    throw new Error('Question is not an object')
   }
-  const factPath = readString(raw, "factPath");
-  const question = readString(raw, "question");
-  const help = readString(raw, "help");
-  if (typeof raw.suggestFromCode !== "boolean") {
-    throw new Error(`Question ${factPath} is missing suggestFromCode`);
+  const factPath = readString(raw, 'factPath')
+  const question = readString(raw, 'question')
+  const help = readString(raw, 'help')
+  if (typeof raw.suggestFromCode !== 'boolean') {
+    throw new Error(`Question ${factPath} is missing suggestFromCode`)
   }
-  const suggestFromCode = raw.suggestFromCode;
-  if (raw.valueKind === "boolean") {
-    return { factPath, question, help, valueKind: "boolean", suggestFromCode };
+  const suggestFromCode = raw.suggestFromCode
+  if (raw.valueKind === 'boolean') {
+    return { factPath, question, help, valueKind: 'boolean', suggestFromCode }
   }
-  if (raw.valueKind !== "array") {
-    throw new Error(`Question ${factPath} has unknown valueKind`);
+  if (raw.valueKind !== 'array') {
+    throw new Error(`Question ${factPath} has unknown valueKind`)
   }
   if (!Array.isArray(raw.options)) {
-    throw new Error(`Question ${factPath} is missing options`);
+    throw new Error(`Question ${factPath} is missing options`)
   }
   const options = raw.options.map((option, index) => {
-    if (
-      !isRecord(option) ||
-      typeof option.value !== "string" ||
-      typeof option.label !== "string"
-    ) {
-      throw new Error(
-        `Question ${factPath} option ${index} is missing value or label`,
-      );
+    if (!isRecord(option) || typeof option.value !== 'string' || typeof option.label !== 'string') {
+      throw new Error(`Question ${factPath} option ${index} is missing value or label`)
     }
-    return { value: option.value, label: option.label };
-  });
+    return { value: option.value, label: option.label }
+  })
   return {
     factPath,
     question,
     help,
-    valueKind: "array",
+    valueKind: 'array',
     suggestFromCode,
     options,
-  };
-};
+  }
+}
 
-export const readScreeningGroups = (
-  raw: unknown,
-): readonly ScreeningGroup[] => {
+export const readScreeningGroups = (raw: unknown): readonly ScreeningGroup[] => {
   if (!Array.isArray(raw)) {
-    throw new Error("Response is missing screeningGroups");
+    throw new Error('Response is missing screeningGroups')
   }
   return raw.map((group) => {
     if (
       !isRecord(group) ||
-      typeof group.id !== "string" ||
-      typeof group.label !== "string" ||
+      typeof group.id !== 'string' ||
+      typeof group.label !== 'string' ||
       !Array.isArray(group.factPaths) ||
-      group.factPaths.some((factPath) => typeof factPath !== "string")
+      group.factPaths.some((factPath) => typeof factPath !== 'string')
     ) {
-      throw new Error("Screening group is missing id, label or factPaths");
+      throw new Error('Screening group is missing id, label or factPaths')
     }
     return {
       id: group.id,
       label: group.label,
       factPaths: group.factPaths as string[],
-    };
-  });
-};
+    }
+  })
+}
 
 /** The answer that rules a fact out: false, or no list item. */
 export const noValue = (question: Question): FactValue =>
-  question.valueKind === "boolean" ? false : [];
+  question.valueKind === 'boolean' ? false : []
 
 export const answerLabel = (question: Question, value: FactValue): string => {
-  if (value === null) return MCP_AIR_FACT_ANSWER_NOT_SURE_LABEL;
-  if (question.valueKind === "boolean") {
-    if (typeof value !== "boolean") {
-      throw new Error(`Answer for ${question.factPath} is not yes or no`);
+  if (value === null) return MCP_AIR_FACT_ANSWER_NOT_SURE_LABEL
+  if (question.valueKind === 'boolean') {
+    if (typeof value !== 'boolean') {
+      throw new Error(`Answer for ${question.factPath} is not yes or no`)
     }
-    return value ? MCP_AIR_FACT_ANSWER_YES_LABEL : MCP_AIR_FACT_ANSWER_NO_LABEL;
+    return value ? MCP_AIR_FACT_ANSWER_YES_LABEL : MCP_AIR_FACT_ANSWER_NO_LABEL
   }
   if (!Array.isArray(value)) {
-    throw new Error(`Answer for ${question.factPath} is not a list`);
+    throw new Error(`Answer for ${question.factPath} is not a list`)
   }
-  if (value.length === 0) return MCP_AIR_FACT_ANSWER_NONE_LABEL;
+  if (value.length === 0) return MCP_AIR_FACT_ANSWER_NONE_LABEL
   return value
     .map((item) => {
-      const option = question.options.find(
-        (candidate) => candidate.value === item,
-      );
+      const option = question.options.find((candidate) => candidate.value === item)
       if (option === undefined) {
-        throw new Error(`Unknown option ${item} for ${question.factPath}`);
+        throw new Error(`Unknown option ${item} for ${question.factPath}`)
       }
-      return option.label;
+      return option.label
     })
-    .join(", ");
-};
+    .join(', ')
+}
 
 const booleanChoice = (value: FactValue): string => {
-  if (value === true) return MCP_AIR_FACT_ANSWER_YES;
-  if (value === false) return MCP_AIR_FACT_ANSWER_NO;
-  if (value === null) return MCP_AIR_FACT_ANSWER_NOT_SURE;
-  throw new Error("A yes or no answer is a list");
-};
+  if (value === true) return MCP_AIR_FACT_ANSWER_YES
+  if (value === false) return MCP_AIR_FACT_ANSWER_NO
+  if (value === null) return MCP_AIR_FACT_ANSWER_NOT_SURE
+  throw new Error('A yes or no answer is a list')
+}
 
 const arrayChoice = (value: FactValue): string[] => {
-  if (value === null) return [MCP_AIR_FACT_ANSWER_NOT_SURE];
-  if (!Array.isArray(value)) throw new Error("A list answer is yes or no");
-  return value.length === 0 ? [MCP_AIR_FACT_ANSWER_NONE] : [...value];
-};
+  if (value === null) return [MCP_AIR_FACT_ANSWER_NOT_SURE]
+  if (!Array.isArray(value)) throw new Error('A list answer is yes or no')
+  return value.length === 0 ? [MCP_AIR_FACT_ANSWER_NONE] : [...value]
+}
 
 /**
  * One question as a form field. A list question has an explicit "None of these" and needs at
  * least one choice, so an untouched field can never be read as "none".
  */
-export const questionField = (
-  question: Question,
-  context?: FieldContext,
-): FormProperty => {
-  const description =
-    context === undefined ? question.help : `${question.help} ${context.line}`;
-  if (question.valueKind === "boolean") {
+export const questionField = (question: Question, context?: FieldContext): FormProperty => {
+  const description = context === undefined ? question.help : `${question.help} ${context.line}`
+  if (question.valueKind === 'boolean') {
     return {
-      type: "string",
+      type: 'string',
       title: question.question,
       description,
       oneOf: [
@@ -211,13 +196,11 @@ export const questionField = (
           title: MCP_AIR_FACT_ANSWER_NOT_SURE_LABEL,
         },
       ],
-      ...(context === undefined
-        ? {}
-        : { default: booleanChoice(context.defaultValue) }),
-    };
+      ...(context === undefined ? {} : { default: booleanChoice(context.defaultValue) }),
+    }
   }
   return {
-    type: "array",
+    type: 'array',
     title: question.question,
     description,
     minItems: 1,
@@ -237,46 +220,35 @@ export const questionField = (
         },
       ],
     },
-    ...(context === undefined
-      ? {}
-      : { default: arrayChoice(context.defaultValue) }),
-  };
-};
+    ...(context === undefined ? {} : { default: arrayChoice(context.defaultValue) }),
+  }
+}
 
-export const readQuestionAnswer = (
-  question: Question,
-  raw: unknown,
-): FactValue => {
-  if (question.valueKind === "boolean") {
-    if (raw === MCP_AIR_FACT_ANSWER_YES) return true;
-    if (raw === MCP_AIR_FACT_ANSWER_NO) return false;
-    if (raw === MCP_AIR_FACT_ANSWER_NOT_SURE) return null;
-    throw new Error(`Unexpected answer for "${question.question}"`);
+export const readQuestionAnswer = (question: Question, raw: unknown): FactValue => {
+  if (question.valueKind === 'boolean') {
+    if (raw === MCP_AIR_FACT_ANSWER_YES) return true
+    if (raw === MCP_AIR_FACT_ANSWER_NO) return false
+    if (raw === MCP_AIR_FACT_ANSWER_NOT_SURE) return null
+    throw new Error(`Unexpected answer for "${question.question}"`)
   }
-  if (
-    !Array.isArray(raw) ||
-    raw.length === 0 ||
-    raw.some((entry) => typeof entry !== "string")
-  ) {
-    throw new Error(`Unexpected answer for "${question.question}"`);
+  if (!Array.isArray(raw) || raw.length === 0 || raw.some((entry) => typeof entry !== 'string')) {
+    throw new Error(`Unexpected answer for "${question.question}"`)
   }
-  const picked = raw as string[];
-  if (picked.includes(MCP_AIR_FACT_ANSWER_NOT_SURE)) return null;
+  const picked = raw as string[]
+  if (picked.includes(MCP_AIR_FACT_ANSWER_NOT_SURE)) return null
   if (picked.includes(MCP_AIR_FACT_ANSWER_NONE)) {
     if (picked.length > 1) {
       throw new Error(
         `"${question.question}" has "${MCP_AIR_FACT_ANSWER_NONE_LABEL}" and other options picked. Ask it again.`,
-      );
+      )
     }
-    return [];
+    return []
   }
-  return picked;
-};
+  return picked
+}
 
-export const checklistField = (
-  groups: readonly ScreeningGroup[],
-): FormProperty => ({
-  type: "array",
+export const checklistField = (groups: readonly ScreeningGroup[]): FormProperty => ({
+  type: 'array',
   title: MCP_AIR_CHECKLIST_TITLE,
   minItems: 1,
   items: {
@@ -292,7 +264,7 @@ export const checklistField = (
       },
     ],
   },
-});
+})
 
 /**
  * What the checklist settles at once, and which questions it opens. A line that is not ticked
@@ -304,74 +276,72 @@ export const readChecklist = (
   questionsByPath: ReadonlyMap<string, Question>,
   raw: unknown,
 ): {
-  readonly answers: readonly FactAnswer[];
-  readonly next: readonly Question[];
+  readonly answers: readonly FactAnswer[]
+  readonly next: readonly Question[]
 } => {
-  if (
-    !Array.isArray(raw) ||
-    raw.length === 0 ||
-    raw.some((entry) => typeof entry !== "string")
-  ) {
-    throw new Error("The checklist has no choice");
+  if (!Array.isArray(raw) || raw.length === 0 || raw.some((entry) => typeof entry !== 'string')) {
+    throw new Error('The checklist has no choice')
   }
-  const picked = new Set(raw as string[]);
-  const ticked = groups.filter((group) => picked.has(group.id));
+  const picked = new Set(raw as string[])
+  const ticked = groups.filter((group) => picked.has(group.id))
   if (picked.has(MCP_AIR_FACT_ANSWER_NONE) && ticked.length > 0) {
     throw new Error(
       `The checklist has "${MCP_AIR_FACT_ANSWER_NONE_LABEL}" and other lines ticked. Ask it again.`,
-    );
+    )
   }
-  const oneByOne = picked.has(MCP_AIR_CHECKLIST_UNSURE);
+  const oneByOne = picked.has(MCP_AIR_CHECKLIST_UNSURE)
   const question = (factPath: string): Question => {
-    const found = questionsByPath.get(factPath);
-    if (found === undefined)
-      throw new Error(`Checklist fact ${factPath} has no question`);
-    return found;
-  };
+    const found = questionsByPath.get(factPath)
+    if (found === undefined) throw new Error(`Checklist fact ${factPath} has no question`)
+    return found
+  }
 
-  const answers: FactAnswer[] = [];
-  const next: Question[] = [];
-  const tickedFacts = new Set(ticked.flatMap((group) => group.factPaths));
+  const answers: FactAnswer[] = []
+  const next: Question[] = []
+  const tickedFacts = new Set(ticked.flatMap((group) => group.factPaths))
   for (const group of groups) {
-    const facts = group.factPaths.map(question);
+    const facts = group.factPaths.map(question)
     if (picked.has(group.id)) {
-      const only = facts.length === 1 ? facts[0] : undefined;
-      if (only !== undefined && only.valueKind === "boolean") {
-        answers.push({ factPath: only.factPath, value: true });
+      const only = facts.length === 1 ? facts[0] : undefined
+      if (only !== undefined && only.valueKind === 'boolean') {
+        answers.push({ factPath: only.factPath, value: true })
       } else {
-        next.push(...facts);
+        next.push(...facts)
       }
-      continue;
+      continue
     }
     for (const fact of facts) {
-      if (tickedFacts.has(fact.factPath)) continue;
+      if (tickedFacts.has(fact.factPath)) continue
       if (oneByOne) {
-        next.push(fact);
+        next.push(fact)
       } else {
-        answers.push({ factPath: fact.factPath, value: noValue(fact) });
+        answers.push({ factPath: fact.factPath, value: noValue(fact) })
       }
     }
   }
-  return { answers, next };
-};
+  return { answers, next }
+}
 
 /** Shows one page. Returns the content, or null when the person closed it. */
 export const askPage = async (
   server: McpServer,
   message: string,
-  properties: ElicitRequestFormParams["requestedSchema"]["properties"],
+  properties: ElicitRequestFormParams['requestedSchema']['properties'],
 ): Promise<Record<string, unknown> | null> => {
-  const result = await server.server.elicitInput({
-    message,
-    requestedSchema: {
-      type: "object",
-      properties,
-      required: Object.keys(properties),
+  const result = await server.server.elicitInput(
+    {
+      message,
+      requestedSchema: {
+        type: 'object',
+        properties,
+        required: Object.keys(properties),
+      },
     },
-  });
-  if (result.action !== "accept" || result.content === undefined) return null;
-  return result.content;
-};
+    { timeout: MCP_AIR_FACT_FORM_TIMEOUT_MS },
+  )
+  if (result.action !== 'accept' || result.content === undefined) return null
+  return result.content
+}
 
 export const suggestionContext = (
   question: Question,
@@ -380,7 +350,7 @@ export const suggestionContext = (
 ): FieldContext => ({
   defaultValue: value,
   line: factSuggestionLine(answerLabel(question, value), reason),
-});
+})
 
 export const conflictContext = (
   question: Question,
@@ -394,4 +364,4 @@ export const conflictContext = (
     answerLabel(question, scanValue),
     excerpt,
   ),
-});
+})

@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { IntegratorApiClient } from '../src/client/integrator-api.js'
 import { createAirMcpServer } from '../src/server.js'
@@ -227,7 +227,9 @@ describe('air_ask_open_facts', () => {
   })
 
   it('refuses "None of these" ticked together with a line', async () => {
-    const { stub, submitFactAnswers } = api(body([employment, scoring], { screeningGroups: groups }))
+    const { stub, submitFactAnswers } = api(
+      body([employment, scoring], { screeningGroups: groups }),
+    )
     const { client } = await connect(stub, () => accept({ checklist: ['none', 'jobs'] }))
 
     const result = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
@@ -374,7 +376,9 @@ describe('air_ask_open_facts', () => {
   })
 
   it('saves nothing when the person closes the first page', async () => {
-    const { stub, submitFactAnswers } = api(body([employment, scoring], { screeningGroups: groups }))
+    const { stub, submitFactAnswers } = api(
+      body([employment, scoring], { screeningGroups: groups }),
+    )
     const { client } = await connect(stub, () => ({ action: 'decline' }))
 
     const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
@@ -384,16 +388,64 @@ describe('air_ask_open_facts', () => {
   })
 
   it('returns the checklist and questions when the client cannot show a form', async () => {
-    const { stub, submitFactAnswers } = api(body([employment, scoring], { screeningGroups: groups }))
+    const { stub, submitFactAnswers } = api(
+      body([employment, scoring], { screeningGroups: groups }),
+    )
     const { client } = await connect(stub)
 
     const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
     expect(payload.checklist).toEqual(groups)
     expect(
-      (payload.questions as ReadonlyArray<{ factPath: string }>).map((question) => question.factPath),
+      (payload.questions as ReadonlyArray<{ factPath: string }>).map(
+        (question) => question.factPath,
+      ),
     ).toEqual([EMPLOYMENT, SCORING])
     expect(submitFactAnswers).not.toHaveBeenCalled()
+  })
+})
+
+describe('form timing', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('keeps the form open while the person takes more than a minute', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { stub, submitFactAnswers } = api(
+      body([scoring], { screeningGroups: [groups[1]!] }),
+      body([], { tierValue: 'MINIMAL' }),
+    )
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const server = createAirMcpServer(
+      { apiUrl: 'http://localhost:4001', apiKey: 'test-key' },
+      { api: stub },
+    )
+    const client = new Client(
+      { name: 'slow-person', version: '1.0.0' },
+      { capabilities: { elicitation: {} } },
+    )
+    client.setRequestHandler(
+      ElicitRequestSchema,
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ action: 'accept', content: { checklist: ['none'] } }), 120_000)
+        }),
+    )
+    await server.connect(serverTransport)
+    await client.connect(clientTransport)
+
+    // Claude Code waits for a tool call far longer than the SDK's 60-second request default.
+    const pending = client.callTool(
+      { name: 'air_ask_open_facts', arguments: { assessmentPid: ASSESSMENT_PID } },
+      undefined,
+      { timeout: 600_000 },
+    )
+    await vi.advanceTimersByTimeAsync(121_000)
+    const result = await pending
+
+    expect(result.isError).not.toBe(true)
+    expect(submitFactAnswers.mock.calls).toEqual([[ASSESSMENT_PID, sent([SCORING, false])]])
   })
 })
 

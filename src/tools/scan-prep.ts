@@ -101,7 +101,11 @@ export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClien
           [MCP_AIR_CHECKLIST_FIELD]: checklistField(groups),
         })
         if (content === null) {
-          return toolJsonResult({ projectPid, declined: true, note: MCP_AIR_SCREENING_DECLINED_NOTE })
+          return toolJsonResult({
+            projectPid,
+            declined: true,
+            note: MCP_AIR_SCREENING_DECLINED_NOTE,
+          })
         }
         const checklist = readChecklist(groups, questionsByPath, content[MCP_AIR_CHECKLIST_FIELD])
         const answers: FactAnswer[] = [...checklist.answers]
@@ -110,7 +114,11 @@ export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClien
           for (const question of checklist.next) detail[question.factPath] = questionField(question)
           const details = await askPage(server, MCP_AIR_FACT_FORM_DETAIL_MESSAGE, detail)
           if (details === null) {
-            return toolJsonResult({ projectPid, declined: true, note: MCP_AIR_SCREENING_DECLINED_NOTE })
+            return toolJsonResult({
+              projectPid,
+              declined: true,
+              note: MCP_AIR_SCREENING_DECLINED_NOTE,
+            })
           }
           for (const question of checklist.next) {
             answers.push({
@@ -208,7 +216,7 @@ export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClien
     {
       title: MCP_AIR_TOOL_TITLES.air_recheck_tier,
       description:
-        'Re-check a scan\'s EU AI Act tier under the current AIR rules from the facts it already holds. Reads no documents and spends no credit. Returns previousTier, the new tier, and the questions that can still change it. Requires assessments:write.',
+        "Re-check a scan's EU AI Act tier under the current AIR rules from the facts it already holds. Reads no documents and spends no credit. Returns previousTier, the new tier, and the questions that can still change it. Requires assessments:write.",
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_recheck_tier },
     },

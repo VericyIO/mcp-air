@@ -18,7 +18,10 @@ const stage = (step: number, label: string, status: string) => ({
 
 const connect = async (api: IntegratorApiClient) => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-  const server = createAirMcpServer({ apiUrl: 'http://localhost:4001', apiKey: 'test-key' }, { api })
+  const server = createAirMcpServer(
+    { apiUrl: 'http://localhost:4001', apiKey: 'test-key' },
+    { api },
+  )
   const client = new Client({ name: 'wait-test', version: '1.0.0' })
   await server.connect(serverTransport)
   await client.connect(clientTransport)
