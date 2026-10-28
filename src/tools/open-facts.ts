@@ -1,18 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
 import {
   MCP_AIR_ASK_OPEN_FACTS_DESCRIPTION,
-  MCP_AIR_CHECKLIST_FIELD,
   MCP_AIR_FACT_FORM_DECLINED_NOTE,
-  MCP_AIR_FACT_FORM_DETAIL_MESSAGE,
   MCP_AIR_FACT_FORM_JUSTIFICATION,
   MCP_AIR_FACT_FORM_MAX_PAGES,
   MCP_AIR_FACT_FORM_MAX_QUESTIONS,
-  MCP_AIR_FACT_FORM_MESSAGE,
-  MCP_AIR_FACT_FORM_SUGGESTED_MESSAGE,
   MCP_AIR_MORE_QUESTIONS_NEXT_STEP,
   MCP_AIR_NO_FORM_NEXT_STEP,
   MCP_AIR_NO_OPEN_QUESTIONS_NOTE,
@@ -21,13 +16,9 @@ import {
 import { supportsElicitation } from '../elicitation.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
 import {
-  askPage,
-  checklistField,
+  askQuestion,
   conflictContext,
-  questionField,
-  readChecklist,
   readQuestion,
-  readQuestionAnswer,
   readScreeningGroups,
   suggestionContext,
   type FactAnswer,
@@ -258,79 +249,24 @@ export const registerAskOpenFactsTool = (server: McpServer, api: IntegratorApiCl
             note: MCP_AIR_FACT_FORM_DECLINED_NOTE,
           })
 
-        for (let page = 0; page < MCP_AIR_FACT_FORM_MAX_PAGES; page += 1) {
+        const maxQuestions = MCP_AIR_FACT_FORM_MAX_PAGES * MCP_AIR_FACT_FORM_MAX_QUESTIONS
+        for (let asked = 0; asked < maxQuestions; asked += 1) {
           const { conflicts, openFacts } = askable()
-          if (conflicts.length === 0 && openFacts.length === 0) break
-
-          const groups = checklistGroups(payload, notSure)
-          const onChecklist = new Set(groups.flatMap((group) => group.factPaths))
-          const conflicted = new Set(conflicts.map((conflict) => conflict.question.factPath))
-          const singles = openFacts
-            .filter(
-              (question) =>
-                !onChecklist.has(question.factPath) && !conflicted.has(question.factPath),
-            )
-            .slice(0, MCP_AIR_FACT_FORM_MAX_QUESTIONS)
-          const properties: ElicitRequestFormParams['requestedSchema']['properties'] = {}
-          for (const conflict of conflicts) {
-            properties[conflict.question.factPath] = questionField(
-              conflict.question,
-              conflictContext(
-                conflict.question,
-                conflict.keptValue,
-                conflict.scanValue,
-                conflict.excerpts[0],
-              ),
-            )
-          }
-          if (groups.length > 0) properties[MCP_AIR_CHECKLIST_FIELD] = checklistField(groups)
-          let suggested = false
-          for (const question of singles) {
-            const context = suggestion(question, proposals)
-            suggested ||= context !== undefined
-            properties[question.factPath] = questionField(question, context)
-          }
-
-          const content = await askPage(
-            server,
-            suggested ? MCP_AIR_FACT_FORM_SUGGESTED_MESSAGE : MCP_AIR_FACT_FORM_MESSAGE,
-            properties,
-          )
-          if (content === null) return declined()
-
-          const questionsByPath = new Map(
-            openFacts.map((question) => [question.factPath, question]),
-          )
-          const pageAnswers: FactAnswer[] = [
-            ...conflicts.map((conflict) => ({
-              factPath: conflict.question.factPath,
-              value: readQuestionAnswer(conflict.question, content[conflict.question.factPath]),
-            })),
-            ...singles.map((question) => ({
-              factPath: question.factPath,
-              value: readQuestionAnswer(question, content[question.factPath]),
-            })),
-          ]
-          const checklist =
-            groups.length === 0
-              ? { answers: [], next: [] }
-              : readChecklist(groups, questionsByPath, content[MCP_AIR_CHECKLIST_FIELD])
-          await submit([...pageAnswers, ...checklist.answers])
-
-          if (checklist.next.length > 0) {
-            const detail: ElicitRequestFormParams['requestedSchema']['properties'] = {}
-            for (const question of checklist.next) {
-              detail[question.factPath] = questionField(question, suggestion(question, proposals))
-            }
-            const details = await askPage(server, MCP_AIR_FACT_FORM_DETAIL_MESSAGE, detail)
-            if (details === null) return declined()
-            await submit(
-              checklist.next.map((question) => ({
-                factPath: question.factPath,
-                value: readQuestionAnswer(question, details[question.factPath]),
-              })),
-            )
-          }
+          const conflict = conflicts[0]
+          const question = conflict?.question ?? openFacts[0]
+          if (question === undefined) break
+          const context =
+            conflict === undefined
+              ? suggestion(question, proposals)
+              : conflictContext(
+                  conflict.question,
+                  conflict.keptValue,
+                  conflict.scanValue,
+                  conflict.excerpts[0],
+                )
+          const result = await askQuestion(server, question, context)
+          if (result.closed) return declined()
+          await submit([{ factPath: question.factPath, value: result.value }])
         }
 
         const left = askable()

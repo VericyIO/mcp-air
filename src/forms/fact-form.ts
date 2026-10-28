@@ -4,9 +4,7 @@ import type { ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js
 import {
   factConflictLine,
   factSuggestionLine,
-  MCP_AIR_CHECKLIST_TITLE,
-  MCP_AIR_CHECKLIST_UNSURE,
-  MCP_AIR_CHECKLIST_UNSURE_LABEL,
+  MCP_AIR_ANSWER_FIELD_TITLE,
   MCP_AIR_FACT_ANSWER_NO,
   MCP_AIR_FACT_ANSWER_NO_LABEL,
   MCP_AIR_FACT_ANSWER_NONE,
@@ -19,9 +17,8 @@ import {
 } from '../config.js'
 
 /**
- * The form a person answers EU AI Act questions in. Page one is one checklist of what the
- * system does plus any single questions; page two asks the details of what they ticked.
- * Field keys are fact paths, which the person never sees: each field shows its question.
+ * The form a person answers EU AI Act questions in. Each question is its own dialog.
+ * Field keys are fact paths, which the person never sees.
  */
 
 export type FactOption = { readonly value: string; readonly label: string }
@@ -134,10 +131,6 @@ export const readScreeningGroups = (raw: unknown): readonly ScreeningGroup[] => 
   })
 }
 
-/** The answer that rules a fact out: false, or no list item. */
-export const noValue = (question: Question): FactValue =>
-  question.valueKind === 'boolean' ? false : []
-
 export const answerLabel = (question: Question, value: FactValue): string => {
   if (value === null) return MCP_AIR_FACT_ANSWER_NOT_SURE_LABEL
   if (question.valueKind === 'boolean') {
@@ -247,79 +240,28 @@ export const readQuestionAnswer = (question: Question, raw: unknown): FactValue 
   return picked
 }
 
-export const checklistField = (groups: readonly ScreeningGroup[]): FormProperty => ({
-  type: 'array',
-  title: MCP_AIR_CHECKLIST_TITLE,
-  minItems: 1,
-  items: {
-    anyOf: [
-      ...groups.map((group) => ({ const: group.id, title: group.label })),
-      {
-        const: MCP_AIR_FACT_ANSWER_NONE,
-        title: MCP_AIR_FACT_ANSWER_NONE_LABEL,
-      },
-      {
-        const: MCP_AIR_CHECKLIST_UNSURE,
-        title: MCP_AIR_CHECKLIST_UNSURE_LABEL,
-      },
-    ],
-  },
-})
+export type Asked =
+  | { readonly closed: true }
+  | { readonly closed: false; readonly value: FactValue }
 
 /**
- * What the checklist settles at once, and which questions it opens. A line that is not ticked
- * answers each of its facts no, unless the person asked to go one by one. A ticked line with one
- * yes/no fact answers it yes; any other ticked line asks its questions next.
+ * One question in its own dialog. The message is the full question: Claude Code cuts a long
+ * choice row, and it shows only the first lines of a message, so the question stays one sentence
+ * and the choices stay Yes, No and Not sure.
  */
-export const readChecklist = (
-  groups: readonly ScreeningGroup[],
-  questionsByPath: ReadonlyMap<string, Question>,
-  raw: unknown,
-): {
-  readonly answers: readonly FactAnswer[]
-  readonly next: readonly Question[]
-} => {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.some((entry) => typeof entry !== 'string')) {
-    throw new Error('The checklist has no choice')
-  }
-  const picked = new Set(raw as string[])
-  const ticked = groups.filter((group) => picked.has(group.id))
-  if (picked.has(MCP_AIR_FACT_ANSWER_NONE) && ticked.length > 0) {
-    throw new Error(
-      `The checklist has "${MCP_AIR_FACT_ANSWER_NONE_LABEL}" and other lines ticked. Ask it again.`,
-    )
-  }
-  const oneByOne = picked.has(MCP_AIR_CHECKLIST_UNSURE)
-  const question = (factPath: string): Question => {
-    const found = questionsByPath.get(factPath)
-    if (found === undefined) throw new Error(`Checklist fact ${factPath} has no question`)
-    return found
-  }
-
-  const answers: FactAnswer[] = []
-  const next: Question[] = []
-  const tickedFacts = new Set(ticked.flatMap((group) => group.factPaths))
-  for (const group of groups) {
-    const facts = group.factPaths.map(question)
-    if (picked.has(group.id)) {
-      const only = facts.length === 1 ? facts[0] : undefined
-      if (only !== undefined && only.valueKind === 'boolean') {
-        answers.push({ factPath: only.factPath, value: true })
-      } else {
-        next.push(...facts)
-      }
-      continue
-    }
-    for (const fact of facts) {
-      if (tickedFacts.has(fact.factPath)) continue
-      if (oneByOne) {
-        next.push(fact)
-      } else {
-        answers.push({ factPath: fact.factPath, value: noValue(fact) })
-      }
-    }
-  }
-  return { answers, next }
+export const askQuestion = async (
+  server: McpServer,
+  question: Question,
+  context?: FieldContext,
+): Promise<Asked> => {
+  const content = await askPage(server, question.question, {
+    [question.factPath]: {
+      ...questionField(question, context),
+      title: MCP_AIR_ANSWER_FIELD_TITLE,
+    },
+  })
+  if (content === null) return { closed: true }
+  return { closed: false, value: readQuestionAnswer(question, content[question.factPath]) }
 }
 
 /** Shows one page. Returns the content, or null when the person closed it. */

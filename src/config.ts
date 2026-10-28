@@ -109,21 +109,10 @@ export const MCP_AIR_FACT_ANSWER_NO_LABEL = 'No' as const
 export const MCP_AIR_FACT_ANSWER_NOT_SURE_LABEL = 'Not sure' as const
 export const MCP_AIR_FACT_ANSWER_NONE_LABEL = 'None of these' as const
 
-/** Form field key of the checklist; fact paths always contain a dot, so it cannot collide. */
-export const MCP_AIR_CHECKLIST_FIELD = 'checklist' as const
-export const MCP_AIR_CHECKLIST_TITLE = 'Does the system do any of these?' as const
-export const MCP_AIR_CHECKLIST_UNSURE = 'unsure' as const
-export const MCP_AIR_CHECKLIST_UNSURE_LABEL = 'Not sure about some — ask one by one' as const
+/** Title of the choice row. The full question is the dialog text, because a long row is cut. */
+export const MCP_AIR_ANSWER_FIELD_TITLE = 'Answer' as const
 
 export const MCP_AIR_NO_OPEN_QUESTIONS_NOTE = 'No open questions. The tier is final.' as const
-
-/** Page messages stay short: Claude Code shows them on one line and cuts the rest. */
-export const MCP_AIR_FACT_FORM_MESSAGE = 'AIR needs these answers to set the EU AI Act tier.' as const
-
-export const MCP_AIR_FACT_FORM_SUGGESTED_MESSAGE =
-  'AIR needs these answers. Check the ones suggested from your code.' as const
-
-export const MCP_AIR_FACT_FORM_DETAIL_MESSAGE = 'A few details about what you ticked.' as const
 
 export const MCP_AIR_FACT_FORM_JUSTIFICATION = 'Answered in the AIR question form.' as const
 
@@ -137,25 +126,25 @@ export const MCP_AIR_STILL_OPEN_NOTE =
   'The person is not sure about these. Do not ask them again in this conversation. Say that the tier is not final until they are answered, and what each one decides.' as const
 
 export const MCP_AIR_NO_FORM_NEXT_STEP =
-  'This client cannot show a form. Ask in chat. First the checklist: one question that lists every checklist label and offers "None of these". For each line they do not pick, send no for each of its facts: false, or [] for a list fact. For a picked line, ask its questions. Then ask the other questions: use the question and help text, offer the options by label, and add "Not sure". Then call air_submit_fact_answers.' as const
+  'This client cannot show a form. Ask each question in chat, in order, using the question and help text. Offer the options by label, and add "Not sure". For a list, also offer "None of these". Then call air_submit_fact_answers. Yes, No and Not sure are true, false and null.' as const
 
 export const MCP_AIR_ASK_OPEN_FACTS_DESCRIPTION =
-  'Ask the person the open EU AI Act questions as a short form: first one checklist of what the system does, then a page of details for what they ticked, then any follow-up questions. Saves each page and re-checks the tier, until no question is open or every open one is "Not sure". proposedAnswers may only cover facts marked suggestFromCode, which the code can show; never suggest what the system is used for or whom it affects. Pass back notSureFactPaths from the last call as skipFactPaths. Answers are kept on the project for later scans. Requires assessments:write.' as const
+  'Ask the person the open EU AI Act questions one at a time. Each dialog shows the full question, then Yes, No and Not sure, or the labelled options. Saves each answer and re-checks the tier, until no question is open or every open one is "Not sure". proposedAnswers may only cover facts marked suggestFromCode, which the code can show; never suggest what the system is used for or whom it affects. Pass back notSureFactPaths from the last call as skipFactPaths. Answers are kept on the project for later scans. Requires assessments:write.' as const
 
 export const MCP_AIR_ASK_SCREENING_QUESTIONS_DESCRIPTION =
-  'Before a scan, ask the person the EU AI Act checklist as a short form: what the system does, then details for what they tick. Facts the project already holds an answer for are left out. Returns the answers to hold: after air_start_assessment, send them with air_save_prepared_answers. It saves nothing itself. Requires projects:read.' as const
+  'Before a scan, ask the person each EU AI Act screening question in its own dialog, with the full question and Yes, No and Not sure, or the labelled options. Facts the project already holds an answer for are left out. Returns the answers to hold: after air_start_assessment, send them with air_save_prepared_answers. It saves nothing itself. Requires projects:read.' as const
 
 export const MCP_AIR_SCREENING_DONE_NOTE =
   'The project already holds an answer for every checklist fact. Ask nothing.' as const
 
 export const MCP_AIR_SCREENING_DECLINED_NOTE =
-  'The person closed the checklist. Nothing is held. Continue without it; the scan asks after it reads the documents.' as const
+  'The person closed a question. Nothing answered after that is held. Continue without those answers; the scan asks after it reads the documents.' as const
 
 export const MCP_AIR_SCREENING_HOLD_NEXT_STEP =
   'Hold these answers. Write each yes answer into the project summary as a declared line. After air_start_assessment returns, send factPath and value of each answer with air_save_prepared_answers.' as const
 
 export const MCP_AIR_SCREENING_NO_FORM_NEXT_STEP =
-  'This client cannot show a form. Ask the checklist in chat: one question that lists every label and offers "None of these". For each line they do not pick, hold no for each of its facts: false, or [] for a list fact. For a picked line, ask its questions. Hold the answers and send them with air_save_prepared_answers after air_start_assessment.' as const
+  'This client cannot show a form. Ask each question in chat, in order, using its question and help text. Offer Yes, No and Not sure, or the options by label plus "None of these" and "Not sure". Hold the answers and send them with air_save_prepared_answers after air_start_assessment.' as const
 
 export const MCP_AIR_LIST_OPEN_FACTS_DESCRIPTION =
   'List the open EU AI Act questions for an assessment: only facts whose answer can still change the tier and that are worth asking now, checklist facts first. screeningGroups are the checklist lines that still hold an open fact. Each item has question (ask it as written), help (one line on why it matters) and, for list facts, options (show the labels, send the values). Boolean facts take true, false, or null for "Not sure"; list facts take option values, or [] for none. answerConflicts are earlier answers that this scan read differently, with the scan\'s excerpts. Never show factPath, description or a raw null to the person. Prefer air_ask_open_facts when the client can show forms. Requires assessments:read.' as const

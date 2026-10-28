@@ -1,13 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
 import {
   MCP_AIR_ASK_SCREENING_QUESTIONS_DESCRIPTION,
-  MCP_AIR_CHECKLIST_FIELD,
-  MCP_AIR_FACT_FORM_DETAIL_MESSAGE,
-  MCP_AIR_FACT_FORM_MESSAGE,
   MCP_AIR_SCREENING_DECLINED_NOTE,
   MCP_AIR_SCREENING_DONE_NOTE,
   MCP_AIR_SCREENING_HOLD_NEXT_STEP,
@@ -17,14 +13,11 @@ import { supportsElicitation } from '../elicitation.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
 import {
   answerLabel,
-  askPage,
-  checklistField,
-  questionField,
-  readChecklist,
+  askQuestion,
   readQuestion,
-  readQuestionAnswer,
   readScreeningGroups,
   type FactAnswer,
+  type Question,
 } from '../forms/fact-form.js'
 import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
 
@@ -97,35 +90,33 @@ export const registerScanPrepTools = (server: McpServer, api: IntegratorApiClien
         }
 
         const questionsByPath = new Map(questions.map((question) => [question.factPath, question]))
-        const content = await askPage(server, MCP_AIR_FACT_FORM_MESSAGE, {
-          [MCP_AIR_CHECKLIST_FIELD]: checklistField(groups),
-        })
-        if (content === null) {
-          return toolJsonResult({
-            projectPid,
-            declined: true,
-            note: MCP_AIR_SCREENING_DECLINED_NOTE,
-          })
+        const ordered: Question[] = []
+        const seen = new Set<string>()
+        for (const group of groups) {
+          for (const factPath of group.factPaths) {
+            const question = questionsByPath.get(factPath)
+            if (question === undefined || seen.has(factPath)) continue
+            ordered.push(question)
+            seen.add(factPath)
+          }
         }
-        const checklist = readChecklist(groups, questionsByPath, content[MCP_AIR_CHECKLIST_FIELD])
-        const answers: FactAnswer[] = [...checklist.answers]
-        if (checklist.next.length > 0) {
-          const detail: ElicitRequestFormParams['requestedSchema']['properties'] = {}
-          for (const question of checklist.next) detail[question.factPath] = questionField(question)
-          const details = await askPage(server, MCP_AIR_FACT_FORM_DETAIL_MESSAGE, detail)
-          if (details === null) {
+        for (const question of questions) {
+          if (seen.has(question.factPath)) continue
+          ordered.push(question)
+          seen.add(question.factPath)
+        }
+
+        const answers: FactAnswer[] = []
+        for (const question of ordered) {
+          const asked = await askQuestion(server, question)
+          if (asked.closed) {
             return toolJsonResult({
               projectPid,
               declined: true,
               note: MCP_AIR_SCREENING_DECLINED_NOTE,
             })
           }
-          for (const question of checklist.next) {
-            answers.push({
-              factPath: question.factPath,
-              value: readQuestionAnswer(question, details[question.factPath]),
-            })
-          }
+          answers.push({ factPath: question.factPath, value: asked.value })
         }
 
         const question = (factPath: string) => {

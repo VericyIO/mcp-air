@@ -9,9 +9,7 @@ import { createAirMcpServer } from '../src/server.js'
 const ASSESSMENT_PID = 'pasm_ask'
 const PROJECT_PID = 'prj_ask'
 const JUSTIFICATION = 'Answered in the AIR question form.'
-const FORM_MESSAGE = 'AIR needs these answers to set the EU AI Act tier.'
-const SUGGESTED_MESSAGE = 'AIR needs these answers. Check the ones suggested from your code.'
-const DETAIL_MESSAGE = 'A few details about what you ticked.'
+const ANSWER_TITLE = 'Answer'
 
 const EMPLOYMENT = 'data_governance.is_employment_use_case'
 const SCORING = 'data_governance.is_social_scoring'
@@ -145,55 +143,47 @@ const sent = (...answers: ReadonlyArray<readonly [string, unknown]>) =>
 const accept = (content: Record<string, unknown>): Answer => ({ action: 'accept', content })
 
 describe('air_ask_open_facts', () => {
-  it('asks the checklist first and answers every line not ticked as no', async () => {
+  it('asks each question in its own dialog, with the full question as the message', async () => {
     const { stub, submitFactAnswers } = api(
       body([employment, scoring], { screeningGroups: groups }),
+      body([scoring], { screeningGroups: [groups[1]!] }),
       body([], { tierValue: 'MINIMAL' }),
     )
-    const { client, pages } = await connect(stub, () => accept({ checklist: ['none'] }))
+    const { client, pages } = await connect(stub, (page) =>
+      page === 1 ? accept({ [EMPLOYMENT]: ['none'] }) : accept({ [SCORING]: 'no' }),
+    )
 
     const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
-    expect(pages).toHaveLength(1)
-    expect(pages[0]?.message).toBe(FORM_MESSAGE)
-    expect(pages[0]?.requestedSchema?.properties.checklist).toEqual({
-      type: 'array',
-      title: 'Does the system do any of these?',
-      minItems: 1,
-      items: {
-        anyOf: [
-          { const: 'jobs', title: 'Hiring or managing workers' },
-          { const: 'social_scoring', title: 'Scoring people' },
-          { const: 'none', title: 'None of these' },
-          { const: 'unsure', title: 'Not sure about some — ask one by one' },
-        ],
-      },
+    expect(pages.map((page) => page.message)).toEqual([employment.question, scoring.question])
+    expect(pages[0]?.requestedSchema?.properties[EMPLOYMENT]).toMatchObject({
+      title: ANSWER_TITLE,
+      description: employment.help,
     })
     expect(submitFactAnswers.mock.calls).toEqual([
-      [ASSESSMENT_PID, sent([EMPLOYMENT, []], [SCORING, false])],
+      [ASSESSMENT_PID, sent([EMPLOYMENT, []])],
+      [ASSESSMENT_PID, sent([SCORING, false])],
     ])
     expect(payload).toMatchObject({ answered: 2, openFactsRemaining: 0, notSureFactPaths: [] })
     expect(payload.nextStep).toBeUndefined()
   })
 
-  it('answers a ticked yes/no line yes and asks a ticked list line on a second page', async () => {
+  it('asks a list question with its options after the yes/no question', async () => {
     const { stub, submitFactAnswers } = api(
-      body([employment, scoring], { screeningGroups: groups }),
+      body([scoring, employment], { screeningGroups: groups }),
       body([employment], { screeningGroups: [groups[0]!] }),
       body([], { tierValue: 'HIGH' }),
     )
     const { client, pages } = await connect(stub, (page) =>
-      page === 1
-        ? accept({ checklist: ['jobs', 'social_scoring'] })
-        : accept({ [EMPLOYMENT]: ['recruitment_selection'] }),
+      page === 1 ? accept({ [SCORING]: 'yes' }) : accept({ [EMPLOYMENT]: ['recruitment_selection'] }),
     )
 
     await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
-    expect(pages.map((page) => page.message)).toEqual([FORM_MESSAGE, DETAIL_MESSAGE])
+    expect(pages.map((page) => page.message)).toEqual([scoring.question, employment.question])
     expect(pages[1]?.requestedSchema?.properties[EMPLOYMENT]).toEqual({
       type: 'array',
-      title: employment.question,
+      title: ANSWER_TITLE,
       description: employment.help,
       minItems: 1,
       items: {
@@ -213,9 +203,7 @@ describe('air_ask_open_facts', () => {
 
   it('refuses a list answer with no choice instead of reading it as none', async () => {
     const { stub, submitFactAnswers } = api(body([employment], { screeningGroups: [groups[0]!] }))
-    const { client } = await connect(stub, (page) =>
-      page === 1 ? accept({ checklist: ['jobs'] }) : accept({ [EMPLOYMENT]: [] }),
-    )
+    const { client } = await connect(stub, () => accept({ [EMPLOYMENT]: [] }))
 
     const result = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
@@ -224,37 +212,35 @@ describe('air_ask_open_facts', () => {
     expect(submitFactAnswers).not.toHaveBeenCalled()
   })
 
-  it('refuses "None of these" ticked together with a line', async () => {
-    const { stub, submitFactAnswers } = api(
-      body([employment, scoring], { screeningGroups: groups }),
+  it('refuses "None of these" picked together with another option', async () => {
+    const { stub, submitFactAnswers } = api(body([employment], { screeningGroups: [groups[0]!] }))
+    const { client } = await connect(stub, () =>
+      accept({ [EMPLOYMENT]: ['none', 'recruitment_selection'] }),
     )
-    const { client } = await connect(stub, () => accept({ checklist: ['none', 'jobs'] }))
 
     const result = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
     expect(result.isError).toBe(true)
-    expect(result.text).toContain(
-      'The checklist has "None of these" and other lines ticked. Ask it again.',
-    )
+    expect(result.text).toContain('None of these')
     expect(submitFactAnswers).not.toHaveBeenCalled()
   })
 
-  it('asks each line one by one when the person is not sure about some', async () => {
+  it('asks the next question after one answer is saved', async () => {
     const { stub, submitFactAnswers } = api(
       body([employment, scoring], { screeningGroups: groups }),
+      body([scoring], { screeningGroups: [groups[1]!] }),
       body([], { tierValue: 'MINIMAL' }),
     )
     const { client, pages } = await connect(stub, (page) =>
-      page === 1
-        ? accept({ checklist: ['unsure'] })
-        : accept({ [EMPLOYMENT]: ['none'], [SCORING]: 'no' }),
+      page === 1 ? accept({ [EMPLOYMENT]: ['none'] }) : accept({ [SCORING]: 'no' }),
     )
 
     await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
-    expect(Object.keys(pages[1]?.requestedSchema?.properties ?? {})).toEqual([EMPLOYMENT, SCORING])
+    expect(pages.map((page) => page.message)).toEqual([employment.question, scoring.question])
     expect(submitFactAnswers.mock.calls).toEqual([
-      [ASSESSMENT_PID, sent([EMPLOYMENT, []], [SCORING, false])],
+      [ASSESSMENT_PID, sent([EMPLOYMENT, []])],
+      [ASSESSMENT_PID, sent([SCORING, false])],
     ])
   })
 
@@ -301,15 +287,12 @@ describe('air_ask_open_facts', () => {
       body([], { tierValue: 'HIGH' }),
     )
     const { client, pages } = await connect(stub, (page) =>
-      page === 1 ? accept({ checklist: ['social_scoring'] }) : accept({ [RIGHTS]: 'yes' }),
+      page === 1 ? accept({ [SCORING]: 'yes' }) : accept({ [RIGHTS]: 'yes' }),
     )
 
     const { payload } = await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
-    expect(pages.map((page) => Object.keys(page.requestedSchema?.properties ?? {}))).toEqual([
-      ['checklist'],
-      [RIGHTS],
-    ])
+    expect(pages.map((page) => page.message)).toEqual([scoring.question, rights.question])
     expect(submitFactAnswers.mock.calls).toEqual([
       [ASSESSMENT_PID, sent([SCORING, true])],
       [ASSESSMENT_PID, sent([RIGHTS, true])],
@@ -340,8 +323,9 @@ describe('air_ask_open_facts', () => {
       proposedAnswers: [{ factPath: DATA, value: ['other'], reason: 'The prompt is chat text.' }],
     })
 
-    expect(pages[0]?.message).toBe(SUGGESTED_MESSAGE)
+    expect(pages[0]?.message).toBe(data.question)
     expect(pages[0]?.requestedSchema?.properties[DATA]).toMatchObject({
+      title: ANSWER_TITLE,
       default: ['other'],
       description: `${data.help} Suggested from your code: Other (The prompt is chat text.)`,
     })
@@ -359,9 +343,10 @@ describe('air_ask_open_facts', () => {
 
     await call(client, 'air_ask_open_facts', { assessmentPid: ASSESSMENT_PID })
 
+    expect(pages[0]?.message).toBe(scoring.question)
     expect(pages[0]?.requestedSchema?.properties[SCORING]).toEqual({
       type: 'string',
-      title: scoring.question,
+      title: ANSWER_TITLE,
       description: `${scoring.help} You answered No before. This scan read Yes: "We rank users by behaviour."`,
       oneOf: [
         { const: 'yes', title: 'Yes' },
@@ -427,7 +412,7 @@ describe('form timing', () => {
       ElicitRequestSchema,
       () =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ action: 'accept', content: { checklist: ['none'] } }), 120_000)
+          setTimeout(() => resolve({ action: 'accept', content: { [SCORING]: 'no' } }), 120_000)
         }),
     )
     await server.connect(serverTransport)
@@ -456,8 +441,8 @@ describe('air_ask_screening_questions', () => {
     const stub = { listScreeningQuestions, savePreparedAnswers } as unknown as IntegratorApiClient
     const { client } = await connect(stub, (page) =>
       page === 1
-        ? accept({ checklist: ['jobs'] })
-        : accept({ [EMPLOYMENT]: ['recruitment_selection', 'termination'] }),
+        ? accept({ [EMPLOYMENT]: ['recruitment_selection', 'termination'] })
+        : accept({ [SCORING]: 'no' }),
     )
 
     const { payload } = await call(client, 'air_ask_screening_questions', {
@@ -467,13 +452,13 @@ describe('air_ask_screening_questions', () => {
     expect(listScreeningQuestions).toHaveBeenCalledWith(PROJECT_PID)
     expect(savePreparedAnswers).not.toHaveBeenCalled()
     expect(payload.answers).toEqual([
-      { factPath: SCORING, value: false, question: scoring.question, answer: 'No' },
       {
         factPath: EMPLOYMENT,
         value: ['recruitment_selection', 'termination'],
         question: employment.question,
         answer: 'Recruitment or selection, Ending employment',
       },
+      { factPath: SCORING, value: false, question: scoring.question, answer: 'No' },
     ])
   })
 })
