@@ -188,6 +188,19 @@ export class IntegratorApiClient {
     }
   }
 
+  async uploadContentToPresignedUrl(uploadUrl: string, content: string, contentType: string) {
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: content,
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new IntegratorApiError(response.status, text)
+    }
+  }
+
   listAssessments(projectPid: string) {
     return this.request<ReadonlyArray<Record<string, unknown>>>(
       `/assessments/projects/${encodeURIComponent(projectPid)}`,
@@ -227,6 +240,52 @@ export class IntegratorApiClient {
     )
   }
 
+  listProjectFactAnswers(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/fact-answers`,
+    )
+  }
+
+  savePreparedAnswers(
+    assessmentPid: string,
+    answers: ReadonlyArray<{
+      factPath: string
+      value: boolean | ReadonlyArray<string> | null
+      justification?: string | undefined
+    }>,
+  ) {
+    return this.request<Record<string, unknown>>(
+      `/assessments/${encodeURIComponent(assessmentPid)}/prepared-answers`,
+      { method: 'POST', body: { answers } },
+    )
+  }
+
+  getRulesNotice(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/rules-notice`,
+    )
+  }
+
+  postponeRulesNotice(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/rules-notice/postpone`,
+      { method: 'POST', body: {} },
+    )
+  }
+
+  listScreeningQuestions(projectPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectPid)}/screening-questions`,
+    )
+  }
+
+  recheckTier(assessmentPid: string) {
+    return this.request<Record<string, unknown>>(
+      `/assessments/${encodeURIComponent(assessmentPid)}/eu-ai-act-tier/recheck`,
+      { method: 'POST', body: {} },
+    )
+  }
+
   listAssessmentStages(assessmentPid: string) {
     return this.request<ReadonlyArray<Record<string, unknown>>>(
       `/assessments/${encodeURIComponent(assessmentPid)}/stages`,
@@ -240,7 +299,7 @@ export class IntegratorApiClient {
   }
 
   startAssessment(projectPid: string, name: string, artifactPids: ReadonlyArray<string>) {
-    return this.request<{ assessmentPid: string; workflowRunId: string }>(
+    return this.request<{ assessmentPid: string; workflowRunId: string; reportUrl: string }>(
       `/assessments/projects/${encodeURIComponent(projectPid)}`,
       { method: 'POST', body: { name, artifactPids } },
     )
@@ -257,6 +316,7 @@ export class IntegratorApiClient {
     return this.request<{
       assessmentPid: string
       workflowRunId: string
+      reportUrl: string
       resumedFromStage: string | null
     }>(`/assessments/${encodeURIComponent(assessmentPid)}/retry`, { method: 'POST', body: {} })
   }

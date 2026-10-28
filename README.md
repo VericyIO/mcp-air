@@ -56,7 +56,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.4.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.5.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -73,7 +73,7 @@ Add the server to whichever client you use. All clients run the same `npx` comma
     "air": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@thalus-ai/mcp-air@1.4.0"],
+      "args": ["-y", "@thalus-ai/mcp-air@1.5.0"],
       "env": {
         "AIR_API_KEY": "${env:AIR_API_KEY}"
       }
@@ -91,7 +91,7 @@ Ask your agent to run `air_list_domains` and `air_list_projects`. You should see
 **MCP Inspector** (optional):
 
 ```bash
-AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.4.0
+AIR_API_KEY=your-key npx @modelcontextprotocol/inspector npx -y @thalus-ai/mcp-air@1.5.0
 ```
 
 ## Remote HTTP (operators)
@@ -217,7 +217,7 @@ Full scope reference: [Authentication guide](https://air.thalus.ai/docs/guides/a
 | Client             | Config file                                                            | Notes                                                                                                                                           |
 | ------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Cursor**         | `.cursor/mcp.json` or `~/.cursor/mcp.json`                             | Restart after changes                                                                                                                           |
-| **Claude Code**    | `.mcp.json` or `~/.claude.json`                                        | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.4.0` — [docs](https://code.claude.com/docs/en/mcp) |
+| **Claude Code**    | `.mcp.json` or `~/.claude.json`                                        | Or: `claude mcp add --env AIR_API_KEY=… --transport stdio air -- npx -y @thalus-ai/mcp-air@1.5.0` — [docs](https://code.claude.com/docs/en/mcp) |
 | **Claude Desktop** | See platform paths below                                               | Quit and reopen the app                                                                                                                         |
 | **VS Code**        | `.vscode/mcp.json` or user config via **MCP: Open User Configuration** | Use Copilot **Agent** mode; root key is `servers`                                                                                               |
 | **Windsurf**       | `~/.codeium/windsurf/mcp_config.json`                                  | Same `mcpServers` JSON as Cursor                                                                                                                |
@@ -236,18 +236,27 @@ Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/
 
 ## Capabilities
 
-### Tools (37 stdio / 34 remote)
+### Tools (45 stdio / 42 remote)
 
 | Category        | Tools                                                                                                                                                                                                                       |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Discovery**   | `air_list_domains`, `air_get_domain`, `air_list_projects`, `air_get_project`, `air_create_project`, `air_search`                                                                                                            |
-| **Documents**   | `air_list_documents`, `air_get_document_download_url`, `air_list_artifacts`, `air_get_artifact_text`, `air_upload_document_init`, `air_upload_document_complete`                                                                  |
-| **Assessments** | `air_list_assessments`, `air_get_assessment`, `air_get_assessment_report`, `air_get_assessment_summary`, `air_list_open_facts`, `air_submit_fact_answers`, `air_get_assessment_stages`, `air_get_assessment_input_artifacts`, `air_create_assessment_draft`, `air_start_assessment`, `air_retry_assessment` |
+| **Documents**   | `air_list_documents`, `air_get_document_download_url`, `air_list_artifacts`, `air_get_artifact_text`, `air_upload_document_init`, `air_upload_document_complete`, `air_upload_document`                                             |
+| **Assessments** | `air_list_assessments`, `air_get_assessment`, `air_get_assessment_report`, `air_get_assessment_summary`, `air_list_open_facts`, `air_ask_open_facts`, `air_submit_fact_answers`, `air_get_assessment_stages`, `air_get_assessment_input_artifacts`, `air_create_assessment_draft`, `air_start_assessment`, `air_retry_assessment` |
+| **Scan prep**   | `air_list_project_fact_answers`, `air_ask_screening_questions`, `air_save_prepared_answers`, `air_get_rules_notice`, `air_postpone_rules_notice`, `air_recheck_tier`                                                                                                            |
 | **Decisions**   | `air_list_project_decisions`, `air_record_project_decision`                                                                                                                                                                 |
 | **Portfolio**   | `air_get_domain_portfolio`                                                                                                                                                                                                  |
 | **Composites**  | `air_wait_for_document_extraction`, `air_wait_for_assessment`, `air_run_assessment_from_file`†, `air_run_full_assessment_pipeline`†                                                                                         |
 | **Account**     | `air_create_account`‡, `air_signup_send_code`‡§, `air_signup_verify_code`‡§, `air_sign_out`¶                                                                                                                                |
 | **Support**     | `air_submit_feedback`‡, `air_request_credits`, `air_get_credit_balance`                                                                                                                                                     |
+
+`air_ask_open_facts` — Ask the open EU AI Act questions as a short form: a checklist of what the system does, then details for what was ticked. Saves each page and re-checks the tier.
+
+`air_ask_screening_questions` — Ask the same checklist before a scan; hold the answers and save them with `air_save_prepared_answers` once the scan starts.
+
+`air_recheck_tier` — Re-check a scan's tier under the current AIR rules, with no new scan and no credit.
+
+`air_upload_document` — Upload a text document, such as the scan summary, to a project in one call: start the upload, send the content, finish it, and wait until AIR has read it.
 
 † stdio only  ‡ needs no credential  § form-only, hidden from the model  ¶ stdio only — it exists where a credential file can
 
@@ -348,7 +357,7 @@ pnpm test
 ## Security
 
 - The MCP process runs with your OS user privileges. Tools such as `air_run_assessment_from_file` can read any local path your user can access.
-- Pin the package version in production (`@thalus-ai/mcp-air@1.4.0`) rather than floating `@latest`.
+- Pin the package version in production (`@thalus-ai/mcp-air@1.5.0`) rather than floating `@latest`.
 - Use least-privilege API key scopes. Write tools (`air_start_assessment`, uploads) consume organization credits.
 - Never commit API keys. Use `env` or `envFile` in MCP client configuration.
 

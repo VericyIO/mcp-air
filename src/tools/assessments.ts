@@ -2,9 +2,16 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
 import type { IntegratorApiClient } from '../client/integrator-api.js'
-import { MCP_AIR_MAX_TOOL_RESULT_CHARS } from '../config.js'
+import {
+  MCP_AIR_LIST_OPEN_FACTS_DESCRIPTION,
+  MCP_AIR_MAX_TOOL_RESULT_CHARS,
+  MCP_AIR_SUMMARY_TIER_SENTENCE,
+  MCP_AIR_SUMMARY_TOP_RISKS,
+  MCP_AIR_SUMMARY_TOP_RISKS_SENTENCE,
+} from '../config.js'
 import { toolErrorResult, toolJsonResult, toolJsonResultWithinBudget } from '../errors.js'
 import { MCP_AIR_TOOL_TITLES } from '../tool-titles.js'
+import { registerAskOpenFactsTool } from './open-facts.js'
 
 const readOnly = {
   readOnlyHint: true,
@@ -87,15 +94,73 @@ const fitItems = (items: ReadonlyArray<unknown>, budgetChars: number) => {
   return kept
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const matchedCriteriaNames = (criteria: unknown): readonly string[] => {
+  if (!Array.isArray(criteria)) {
+    throw new Error('euAiActTier.criteria is not an array')
+  }
+  const names: string[] = []
+  for (const item of criteria) {
+    if (!isRecord(item)) {
+      throw new Error('EU AI Act criterion is not an object')
+    }
+    if (item.criteriaStatus !== 'triggered') {
+      continue
+    }
+    if (typeof item.name !== 'string') {
+      throw new Error('Triggered EU AI Act criterion is missing a name')
+    }
+    names.push(item.name)
+  }
+  return names
+}
+
+const compactEuAiActTier = (raw: unknown) => {
+  if (!isRecord(raw)) {
+    return raw
+  }
+  if (!('tier' in raw)) {
+    throw new Error('euAiActTier.tier is missing')
+  }
+  return {
+    available: raw.available,
+    tier: raw.tier,
+    matchedCriteria: matchedCriteriaNames(raw.criteria),
+  }
+}
+
+const compactTopRisk = (item: unknown) => {
+  if (!isRecord(item)) {
+    throw new Error('riskRegister item is not an object')
+  }
+  return {
+    riskId: item.riskId,
+    riskTitle: item.riskTitle,
+    severity: item.severity,
+    likelihood: item.likelihood,
+    riskStatement: item.riskStatement,
+  }
+}
+
+const compactTopRisks = (riskRegister: unknown) => {
+  if (!Array.isArray(riskRegister)) {
+    return []
+  }
+  return riskRegister.slice(0, MCP_AIR_SUMMARY_TOP_RISKS).map(compactTopRisk)
+}
+
 const buildAssessmentSummary = (report: Record<string, unknown>) => ({
   assessmentPid: report.assessmentPid,
   projectName: report.projectName,
   projectOverview: report.projectOverview,
   overview: report.overview,
   quality: report.quality,
-  euAiActTier: report.euAiActTier,
+  euAiActTier: compactEuAiActTier(report.euAiActTier),
   systemProfile: report.systemProfile,
   riskRegisterCount: Array.isArray(report.riskRegister) ? report.riskRegister.length : 0,
+  topRisks: compactTopRisks(report.riskRegister),
   watchlistCount: Array.isArray(report.watchlist) ? report.watchlist.length : 0,
   clearedThemesCount: Array.isArray(report.clearedThemes) ? report.clearedThemes.length : 0,
   cannotEvaluateThemesCount: Array.isArray(report.cannotEvaluateThemes)
@@ -240,7 +305,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary,
       description:
-        'Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, EU AI Act tier, section counts, the saved project choices (projectDecisions, each with posture and, when it came back, cameBackBecause), and changesSincePrevious — each checklist item that closed, is still open, is new, or came back since the previous completed scan, plus inputs: the documents added, removed, or changed in content (a re-upload of the same text is unchanged). Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. Requires assessments:read.',
+        `Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, ${MCP_AIR_SUMMARY_TIER_SENTENCE}, section counts, the saved project choices (projectDecisions, each with posture and, when it came back, cameBackBecause), and changesSincePrevious — each checklist item that closed, is still open, is new, was newly judged, came back, or could not be judged since the previous completed scan, plus inputs: the documents added, removed, or changed in content (a re-upload of the same text is unchanged). Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. ${MCP_AIR_SUMMARY_TOP_RISKS_SENTENCE} Requires assessments:read.`,
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary },
     },
@@ -258,19 +323,20 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     'air_list_open_facts',
     {
       title: MCP_AIR_TOOL_TITLES.air_list_open_facts,
-      description:
-        'List the open EU AI Act facts for an assessment (each missing fact once, with the criteria it unblocks). Each fact has a description of what it means and a valueKind: boolean facts take true, false, or null (unknown); array facts take only words from allowedValues, or [] for none of them. Also lists answerConflicts: answers the project kept from earlier scans that this scan read differently from new text, with the scan reading and its excerpts; the kept answer still sets the tier until the person answers again. Requires assessments:read.',
+      description: MCP_AIR_LIST_OPEN_FACTS_DESCRIPTION,
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_open_facts },
     },
     async ({ assessmentPid }) => {
       try {
         return toolJsonResult(await api.listOpenFacts(assessmentPid))
-      } catch (error) {
+      }       catch (error) {
         return toolErrorResult(error, 'air_list_open_facts')
       }
     },
   )
+
+  registerAskOpenFactsTool(server, api)
 
   server.registerTool(
     'air_submit_fact_answers',
@@ -369,7 +435,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_start_assessment,
       description:
-        'Start a risk assessment on a project. Consumes org credits and dispatches the risk pipeline. Requires assessments:write. Returns assessmentPid.',
+        'Start a risk assessment on a project. Consumes org credits and dispatches the risk pipeline. Requires assessments:write. Returns assessmentPid and reportUrl. Give the person the reportUrl link when the scan starts.',
       inputSchema: {
         projectPid: z.string(),
         name: z.string().describe('Display name for the run'),

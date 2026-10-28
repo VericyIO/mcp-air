@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { IntegratorApiClient } from '../client/integrator-api.js'
 import {
   MCP_AIR_ASSESSMENT_POLL_INTERVAL_MS,
+  MCP_AIR_ASSESSMENT_POLL_MAX_INTERVAL_MS,
   MCP_AIR_ASSESSMENT_POLL_TIMEOUT_MS,
   MCP_AIR_ASSESSMENT_TASK_TTL_MS,
   MCP_AIR_DOCUMENT_EXTRACTION_POLL_INTERVAL_MS,
@@ -11,7 +12,12 @@ import {
   MCP_AIR_REMOTE_WAIT_TIMEOUT_MS,
 } from '../config.js'
 import { toolErrorResult, toolJsonResult } from '../errors.js'
-import { pollUntilAssessmentReady, pollUntilDocumentTerminal } from '../poll.js'
+import {
+  isAssessmentFailed,
+  isAssessmentReportReady,
+  pollUntilAssessmentReady,
+  pollUntilDocumentTerminal,
+} from '../poll.js'
 import { standardAirTaskHandlers } from '../tasks/task-handlers.js'
 import { runFullAssessmentPipelineTask } from '../tasks/workers.js'
 import type { McpAirSurface } from '../surface.js'
@@ -28,6 +34,32 @@ const readOnlyHint = {
   destructiveHint: false,
   openWorldHint: true,
 } as const
+
+const STAGE_CHANGED_NOTE =
+  'AIR is now on this step. Tell the person stageLabel in one line, then call air_wait_for_assessment again with lastStageLabel set to it.'
+
+/**
+ * The line to show while a scan runs: "Step 4 of 12: Checking each risk theme". A running stage
+ * wins, otherwise the last completed one. A used row without a label or a step is a defect.
+ */
+export const currentStageLabel = (
+  stages: ReadonlyArray<Record<string, unknown>>,
+): string | undefined => {
+  const chosen =
+    stages.find((stage) => stage.status === 'running') ??
+    stages.findLast((stage) => stage.status === 'completed')
+  if (chosen === undefined) {
+    return undefined
+  }
+  if (
+    typeof chosen.label !== 'string' ||
+    typeof chosen.step !== 'number' ||
+    typeof chosen.stepCount !== 'number'
+  ) {
+    throw new Error('Assessment stage is missing its label or step')
+  }
+  return `Step ${chosen.step} of ${chosen.stepCount}: ${chosen.label}`
+}
 
 /**
  * MCP Tasks execution — long-running pipeline tools return a task handle immediately.
@@ -117,7 +149,7 @@ export const registerCompositeTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment,
       description:
-        'Wait until an assessment is completed, failed, or reportAvailable, up to timeoutMs. Uses exponential backoff. Returns ready:false with the last observed status if the wait budget runs out — call again with the same assessmentPid to keep waiting. Requires assessments:read.',
+        'Wait until an assessment is completed, failed, or reportAvailable, or until its step differs from lastStageLabel, up to timeoutMs. Uses exponential backoff. A new step returns ready:false with stageLabel ("Step 4 of 12: Checking each risk theme"), the line to show the person, and reportUrl. Call again with lastStageLabel set to the line you showed. Returns ready:false with the last observed status if the wait budget runs out — call again to keep waiting. Requires assessments:read.',
       inputSchema: {
         assessmentPid: z.string(),
         timeoutMs: z
@@ -127,24 +159,72 @@ export const registerCompositeTools = (
           .max(assessmentWaitCeilingMs)
           .optional()
           .describe(`Default ${assessmentWaitCeilingMs}ms; max ${assessmentWaitCeilingMs}ms`),
+        lastStageLabel: z
+          .string()
+          .optional()
+          .describe('The step line you last showed the person; omit on the first wait'),
       },
       annotations: { ...readOnlyHint, title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment },
     },
-    async ({ assessmentPid, timeoutMs }) => {
+    async ({ assessmentPid, timeoutMs, lastStageLabel }, extra) => {
       const timeout = timeoutMs ?? assessmentWaitCeilingMs
+      let announcedLabel = lastStageLabel
+      let stageChanged = false
       try {
         const outcome = await pollUntilAssessmentReady(
           () => api.getAssessment(assessmentPid),
           timeout,
+          MCP_AIR_ASSESSMENT_POLL_INTERVAL_MS,
+          MCP_AIR_ASSESSMENT_POLL_MAX_INTERVAL_MS,
+          async (assessment) => {
+            const status = String(assessment.status)
+            if (isAssessmentFailed(status) || isAssessmentReportReady(assessment)) {
+              return 'continue'
+            }
+            const stages = await api.listAssessmentStages(assessmentPid)
+            if (stages.some((stage) => stage.status === 'failed')) {
+              return 'continue'
+            }
+            const label = currentStageLabel(stages)
+            if (label === undefined) {
+              return 'continue'
+            }
+            if (label === announcedLabel) {
+              return 'continue'
+            }
+            announcedLabel = label
+            stageChanged = true
+            const progressToken = extra._meta?.progressToken
+            if (typeof progressToken === 'string' || typeof progressToken === 'number') {
+              await extra.sendNotification({
+                method: 'notifications/progress',
+                params: { progressToken, progress: 0, message: label },
+              })
+            }
+            return 'yield'
+          },
         )
 
         if (!outcome.ready) {
+          const reportUrl = outcome.last?.reportUrl
+          if (stageChanged && typeof announcedLabel === 'string') {
+            return toolJsonResult({
+              ready: false,
+              assessmentPid,
+              status: outcome.last?.status ?? 'unknown',
+              stageLabel: announcedLabel,
+              ...(typeof reportUrl === 'string' ? { reportUrl } : {}),
+              note: STAGE_CHANGED_NOTE,
+            })
+          }
           return toolJsonResult({
             ready: false,
             assessmentPid,
             status: outcome.last?.status ?? 'unknown',
             assessment: outcome.last,
-            note: `Assessment is still running after ${timeout}ms. Call air_wait_for_assessment again with the same assessmentPid to keep waiting.`,
+            ...(typeof announcedLabel === 'string' ? { stageLabel: announcedLabel } : {}),
+            ...(typeof reportUrl === 'string' ? { reportUrl } : {}),
+            note: `Assessment is still running after ${timeout}ms. Call air_wait_for_assessment again with the same assessmentPid and lastStageLabel to keep waiting.`,
           })
         }
 
