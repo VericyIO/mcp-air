@@ -389,12 +389,6 @@ export class IntegratorApiClient {
     return this.request<Record<string, unknown>>('/billing/credits')
   }
 
-  creditPurchaseLink() {
-    return this.request<Record<string, unknown>>('/billing/credit-purchase-link', {
-      method: 'POST',
-      body: {},
-    })
-  }
 
   requestCredits(payload: {
     readonly credits: number
