@@ -217,6 +217,46 @@ describe('support tools', () => {
     })
   })
 
+  // Regression: a form host returns a blank optional field as "". With
+  // `format: 'email'` on that field the SDK rejected the whole reply and the
+  // request never left the server (Claude showed "Request more credits: Failed").
+  it('sends a credit request when the dialog returns a blank reply address', async () => {
+    const requestCredits = vi.fn().mockResolvedValue({ pid: 'sup_credit', status: 'open' })
+    const client = await connectWithElicitation(
+      stubApi({ apiKey: 'air_key', requestCredits }),
+      { credits: 5, reason: 'pilot', contactEmail: '' },
+    )
+
+    const result = await client.callTool({
+      name: 'air_request_credits',
+      arguments: { credits: 5, reason: 'running a pilot' },
+    })
+
+    expect(result.isError).toBeUndefined()
+    expect(requestCredits).toHaveBeenCalledTimes(1)
+    expect(requestCredits).toHaveBeenCalledWith({
+      credits: 5,
+      reason: 'pilot',
+      context: MCP_CALLER_CONTEXT,
+    })
+  })
+
+  it('sends feedback when the dialog returns a blank contact address', async () => {
+    const submitFeedback = vi.fn().mockResolvedValue({ pid: 'sup_fb', received: true })
+    const client = await connectWithElicitation(
+      stubApi({ apiKey: 'air_key', submitFeedback }),
+      { category: 'idea', message: 'more links', contactEmail: '' },
+    )
+
+    const result = await client.callTool({
+      name: 'air_submit_feedback',
+      arguments: { category: 'idea', message: 'more links' },
+    })
+
+    expect(result.isError).toBeUndefined()
+    expect(submitFeedback).toHaveBeenCalledTimes(1)
+  })
+
   it('names the MCP host on every authenticated write, for triage', async () => {
     // Without this the internal notification reads "Received from unknown".
     const submitFeedback = vi.fn().mockResolvedValue({ pid: 'sup_ctx', received: true })

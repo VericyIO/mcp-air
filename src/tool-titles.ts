@@ -6,7 +6,7 @@ export const MCP_AIR_TOOL_TITLES = {
   air_get_domain: 'Get domain',
   air_list_projects: 'List projects',
   air_get_project: 'Get project',
-  air_create_project: 'Create project',
+  air_create_project: 'Create or edit a project',
   air_search: 'Search',
   air_list_documents: 'List documents',
   air_get_document_download_url: 'Get document download URL',

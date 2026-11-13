@@ -87,7 +87,7 @@ export const formatIntegratorApiError = (status: number, body: string): string =
     const recovery = recoveryFromBody(body)
     return recovery === undefined
       ? `AIR API billing error (402). Insufficient credits or inactive billing. Response: ${detail}`
-      : `AIR API billing error (402). ${recovery} Use air_request_credits to ask Thalus, or air_get_credit_balance to see the balance and the purchase link.`
+      : `AIR API billing error (402). ${recovery} Use air_request_credits to ask Thalus, or air_get_credit_balance for the balance and the purchaseUrl link to buy credits.`
   }
 
   if (status === 429) {
@@ -154,7 +154,7 @@ const scopeHints: Readonly<Record<string, string>> = {
   air_run_full_assessment_pipeline: `Requires scopes: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_WRITE}, ${MCP_INTEGRATOR_API_KEY_SCOPE_PROJECTS_READ}`,
   air_submit_feedback: 'Requires no scope. Works with no account at all when you supply a contact email',
   air_request_credits:
-    'Requires no scope beyond a valid credential; a domain API key must supply a contact email',
+    'Requires no scope beyond a valid credential. The reply goes to the organization owner',
   air_get_credit_balance: 'Requires no scope beyond a valid credential',
   'resource:assessment-report': `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
   'resource:assessment-stages': `Requires scope: ${MCP_INTEGRATOR_API_KEY_SCOPE_ASSESSMENTS_READ}`,
@@ -176,10 +176,27 @@ export const formatHandlerError = (error: unknown, handlerName: string): string 
   return `Unknown error: ${String(error)}\n\nHint: ${hint}`
 }
 
-export const toolErrorResult = (error: unknown, toolName: string) => ({
-  isError: true as const,
-  content: [{ type: 'text' as const, text: formatHandlerError(error, toolName) }],
-})
+/**
+ * A failed tool shows only in the person's chat, so without this line nobody at
+ * Thalus can see it. Status and message only: never the request arguments.
+ */
+const logToolError = (error: unknown, toolName: string): void => {
+  const detail =
+    error instanceof IntegratorApiError
+      ? `API ${error.status}`
+      : error instanceof Error
+        ? error.message
+        : String(error)
+  process.stderr.write(`[mcp-air] tool ${toolName} failed: ${detail}\n`)
+}
+
+export const toolErrorResult = (error: unknown, toolName: string) => {
+  logToolError(error, toolName)
+  return {
+    isError: true as const,
+    content: [{ type: 'text' as const, text: formatHandlerError(error, toolName) }],
+  }
+}
 
 export const toolJsonResult = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
