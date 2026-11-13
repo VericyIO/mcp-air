@@ -389,7 +389,6 @@ export class IntegratorApiClient {
     return this.request<Record<string, unknown>>('/billing/credits')
   }
 
-
   requestCredits(payload: {
     readonly credits: number
     readonly reason: string
