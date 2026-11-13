@@ -22,6 +22,7 @@ import { registerScanPrepTools } from './tools/scan-prep.js'
 import { registerSupportTools } from './tools/support.js'
 import type { StdioSession } from './session.js'
 import type { McpAirSurface } from './surface.js'
+import { MCP_AIR_SERVER_INSTRUCTIONS } from './instructions.js'
 
 export type CreateAirMcpServerOptions = {
   readonly surface?: McpAirSurface
@@ -58,6 +59,7 @@ export const createAirMcpServer = (
         },
       },
       taskStore,
+      instructions: MCP_AIR_SERVER_INSTRUCTIONS,
     },
   )
 

@@ -91,10 +91,12 @@ const confirmFeedback = async (
           maxLength: MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH,
           default: draft.message,
         },
+        // No `format: 'email'`: hosts return a blank optional field as "", which
+        // fails that format and makes the SDK reject the whole reply. The API
+        // validates a non-blank address.
         contactEmail: {
           type: 'string',
           title: 'Contact email (optional)',
-          format: 'email',
         },
       },
       required: ['category', 'message'],
@@ -202,7 +204,7 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
     {
       title: MCP_AIR_TOOL_TITLES.air_request_credits,
       description:
-        'Ask Thalus for more assessment credits. The person reviews the amount and the reason before the request is sent, and Thalus replies by email to the organization owner. To buy credits immediately instead, call air_get_credit_balance for the purchase link.',
+        'Ask Thalus for more credits. The person reviews the amount and the reason before the request is sent, and Thalus replies by email to the organization owner. To buy credits now instead, call air_get_credit_balance and give the person its purchaseUrl.',
       // No `contactEmail`, for the reason given on `air_submit_feedback`. Left
       // blank, the API replies to the organization owner.
       inputSchema: {
@@ -246,7 +248,7 @@ export const registerSupportTools = (server: McpServer, api: IntegratorApiClient
     {
       title: MCP_AIR_TOOL_TITLES.air_get_credit_balance,
       description:
-        'Assessment credits available to this organization, with the plan and the cost per assessment. Call it before a batch of assessments so the limit is predicted instead of hit.',
+        'Credits available to this organization, the plan, and the credits each AIR Scan costs (assessmentCreditCost). purchaseUrl is the AIR billing page where the person buys more credits; give them that link when they want to buy. It is null when the organization is billed by agreement. Call this before a batch of AIR Scans so the limit is predicted instead of hit.',
       inputSchema: {},
       annotations: {
         ...readOnly,
@@ -301,10 +303,10 @@ const confirmCreditRequest = async (
           maxLength: MCP_AIR_SUPPORT_MESSAGE_MAX_LENGTH,
           default: draft.reason,
         },
+        // No `format: 'email'`, for the reason on the feedback form above.
         contactEmail: {
           type: 'string',
           title: 'Reply to a different address (optional)',
-          format: 'email',
         },
       },
       // Blank is the good default: the API replies to the organization owner. It

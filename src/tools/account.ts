@@ -335,7 +335,7 @@ ${appRuntime()}
         })
         $('done-note').textContent =
           'Organization ' + done.orgSlug + ', domain ' + done.domainSlug + ', ' + done.credits +
-          ' assessment credit' + (done.credits === 1 ? '' : 's') + ' to start.'
+          ' AIR Scan credit' + (done.credits === 1 ? '' : 's') + ' to start.'
         $('signin').onclick = async () => {
           const button = $('signin')
           button.disabled = true

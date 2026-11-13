@@ -82,7 +82,7 @@ export const pollUntilAssessmentReady = async (
     if (isAssessmentDraft(status)) {
       const assessmentPid = typeof assessment.pid === 'string' ? assessment.pid : 'unknown'
       throw new Error(
-        `Assessment ${assessmentPid} is still a draft — start it with air_start_assessment before waiting`,
+        `AIR Scan ${assessmentPid} is still a draft — start it with air_start_assessment before waiting`,
       )
     }
     if (isAssessmentFailed(status) || isAssessmentReportReady(assessment)) {

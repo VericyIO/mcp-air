@@ -39,7 +39,7 @@ export const registerDocumentTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_list_documents,
       description:
-        "List document sources for a project. Poll until status is connected before starting an assessment. Requires projects:read.",
+        "List document sources for a project. Poll until status is connected before starting an AIR Scan. Requires projects:read.",
       inputSchema: {
         projectPid: z.string().describe("Project pid"),
         includeArchived: z

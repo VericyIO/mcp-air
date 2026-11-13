@@ -5,7 +5,7 @@ import { MCP_AIR_REQUEST_TIMEOUT_MS } from '../config.js'
 import { IntegratorApiError } from '../errors.js'
 
 type RequestOptions = {
-  readonly method?: 'GET' | 'POST' | 'DELETE'
+  readonly method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   readonly body?: unknown
   readonly query?: Record<string, string | number | boolean | undefined>
 }
@@ -110,6 +110,24 @@ export class IntegratorApiClient {
       `/domains/${encodeURIComponent(domainPid)}/projects`,
       { method: 'POST', body: payload },
     )
+  }
+
+  updateProject(
+    domainPid: string,
+    projectPid: string,
+    payload: { name?: string; description?: string | null },
+  ) {
+    return this.request<Record<string, unknown>>(
+      `/domains/${encodeURIComponent(domainPid)}/projects/${encodeURIComponent(projectPid)}`,
+      { method: 'PATCH', body: payload },
+    )
+  }
+
+  renameDomain(domainPid: string, name: string) {
+    return this.request<Record<string, unknown>>(`/domains/${encodeURIComponent(domainPid)}`, {
+      method: 'PATCH',
+      body: { name },
+    })
   }
 
   lookupDomain(orgSlug: string, domainSlug: string) {
@@ -369,13 +387,6 @@ export class IntegratorApiClient {
 
   creditBalance() {
     return this.request<Record<string, unknown>>('/billing/credits')
-  }
-
-  creditPurchaseLink() {
-    return this.request<Record<string, unknown>>('/billing/credit-purchase-link', {
-      method: 'POST',
-      body: {},
-    })
   }
 
   requestCredits(payload: {

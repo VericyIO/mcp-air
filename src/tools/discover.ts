@@ -6,6 +6,7 @@ import type { IntegratorApiClient } from "../client/integrator-api.js";
 import { MCP_AIR_DEFAULT_LIST_LIMIT } from "../config.js";
 import { toolErrorResult, toolJsonResult } from "../errors.js";
 import { MCP_AIR_TOOL_TITLES } from "../tool-titles.js";
+import { planProjectChange } from "./project-change.js";
 
 const readOnly = {
   readOnlyHint: true,
@@ -28,7 +29,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_list_domains,
       description:
-        "List domains visible to the API key. For domain-scoped service account keys, returns the single bound domain. Requires domains:read scope.",
+        "List domains visible to the API key. For domain-scoped service account keys, returns the single bound domain. Requires domains:read scope. Each result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the domain.",
       inputSchema: {},
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_domains },
     },
@@ -46,7 +47,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_get_domain,
       description:
-        "Resolve a domain by pid from air_list_domains results, or by orgSlug + domainSlug via slug lookup.",
+        "Resolve a domain by pid from air_list_domains results, or by orgSlug + domainSlug via slug lookup. The result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the domain.",
       inputSchema: {
         domainPid: z
           .string()
@@ -88,7 +89,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_list_projects,
       description:
-        "List projects in a domain (paginated). Requires domains:read and projects:read. Use domainPid from air_list_domains.",
+        "List projects in a domain (paginated). Requires domains:read and projects:read. Use domainPid from air_list_domains. Each result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the project.",
       inputSchema: {
         domainPid: z.string().describe("Domain pid"),
         page: z
@@ -127,7 +128,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_get_project,
       description:
-        "Resolve a project by pid from air_list_projects, or by orgSlug + domainSlug + projectSlug.",
+        "Resolve a project by pid from air_list_projects, or by orgSlug + domainSlug + projectSlug. The result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the project.",
       inputSchema: {
         projectPid: z
           .string()
@@ -177,30 +178,50 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_create_project,
       description:
-        "Create a project in a domain. Requires domains:write (fullPipeline preset). Returns project pid and slug.",
+        "Create a project in a domain, edit an existing project, or rename the domain. To create: pass name and slug. To edit: pass projectPid with a new name and/or description. To rename the domain: pass domainName. Slugs never change, so links keep working. Requires domains:write (fullPipeline preset). The result has webUrl: give the person that link to the project in AIR.",
       inputSchema: {
         domainPid: z.string().describe("Domain pid from air_list_domains"),
-        name: z.string().min(1).describe("Display name for the project"),
+        projectPid: z
+          .string()
+          .optional()
+          .describe("Edit this project instead of creating one"),
+        name: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Project display name. Required to create; a new name when editing"),
         slug: z
           .string()
           .min(1)
-          .describe("URL-safe slug (unique within the domain)"),
+          .optional()
+          .describe("URL-safe slug, unique in the domain. Only when creating"),
         description: z
           .string()
           .optional()
-          .describe("Optional project description"),
+          .describe("Project description. When editing, an empty string removes it"),
+        domainName: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("New display name for the domain"),
       },
       annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_create_project },
     },
-    async ({ domainPid, name, slug, description }) => {
+    async ({ domainPid, projectPid, name, slug, description, domainName }) => {
       try {
-        return toolJsonResult(
-          await api.createProject(domainPid, {
-            name,
-            slug,
-            ...(description !== undefined ? { description } : {}),
-          }),
-        );
+        const plan = planProjectChange({ projectPid, name, slug, description, domainName });
+        const domain =
+          domainName === undefined ? undefined : await api.renameDomain(domainPid, domainName);
+        const project =
+          plan.kind === "create"
+            ? await api.createProject(domainPid, plan.payload)
+            : plan.kind === "edit"
+              ? await api.updateProject(domainPid, plan.projectPid, plan.payload)
+              : undefined;
+        if (project === undefined) {
+          return toolJsonResult(domain);
+        }
+        return toolJsonResult(domain === undefined ? project : { ...project, domain });
       } catch (error) {
         return toolErrorResult(error, "air_create_project");
       }

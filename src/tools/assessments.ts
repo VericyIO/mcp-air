@@ -179,7 +179,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     'air_list_assessments',
     {
       title: MCP_AIR_TOOL_TITLES.air_list_assessments,
-      description: 'List assessment summaries for a project. Requires assessments:read.',
+      description: 'List AIR Scan summaries for a project. Requires assessments:read.',
       inputSchema: { projectPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_assessments },
     },
@@ -197,9 +197,9 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment,
       description:
-        'Get assessment detail including status and workflowRunId. Requires assessments:read.',
+        'Get AIR Scan detail including status and workflowRunId. Requires assessments:read.',
       inputSchema: {
-        assessmentPid: z.string().describe('Assessment pid (pasm_*)'),
+        assessmentPid: z.string().describe('AIR Scan pid (pasm_*)'),
       },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment },
     },
@@ -217,7 +217,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_report,
       description:
-        'Fetch the structured risk assessment report for a completed run. Omit section to get the whole report; if it is too large for one response you get a section index instead — each section with its size and item count — so you can pull the parts you need. Pass section for one slice, and offset/limit to page through a list section such as riskRegister or evidenceAppendix. Requires assessments:read.',
+        'Fetch the structured risk report for a completed AIR Scan. Omit section to get the whole report; if it is too large for one response you get a section index instead — each section with its size and item count — so you can pull the parts you need. Pass section for one slice, and offset/limit to page through a list section such as riskRegister or evidenceAppendix. Requires assessments:read.',
       inputSchema: {
         assessmentPid: z.string(),
         section: z
@@ -305,7 +305,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary,
       description:
-        `Fetch a slim assessment report summary without the full risk/evidence payload: overview, quality, ${MCP_AIR_SUMMARY_TIER_SENTENCE}, section counts, the saved project choices (projectDecisions, each with posture and, when it came back, cameBackBecause), and changesSincePrevious — each checklist item that closed, is still open, is new, was newly judged, came back, or could not be judged since the previous completed scan, plus inputs: the documents added, removed, or changed in content (a re-upload of the same text is unchanged). Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. ${MCP_AIR_SUMMARY_TOP_RISKS_SENTENCE} Requires assessments:read.`,
+        `Fetch a slim AIR Scan report summary without the full risk/evidence payload: overview, quality, ${MCP_AIR_SUMMARY_TIER_SENTENCE}, section counts, the saved project choices (projectDecisions, each with posture and, when it came back, cameBackBecause), and changesSincePrevious — each checklist item that closed, is still open, is new, was newly judged, came back, or could not be judged since the previous completed scan, plus inputs: the documents added, removed, or changed in content (a re-upload of the same text is unchanged). Read those labels as given; do not work out the match yourself. Prefer this over air_get_assessment_report for triage. ${MCP_AIR_SUMMARY_TOP_RISKS_SENTENCE} Requires assessments:read.`,
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_summary },
     },
@@ -343,7 +343,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_submit_fact_answers,
       description:
-        'Submit answers for open EU AI Act facts and re-derive the tier on this assessment, with no new scan. Pass factPath + value + a short justification in the person\'s words. An array fact accepts only its allowedValues; any other word is refused with 422 naming the allowed values. Answers are kept on the project, so later scans start from them; null ("I don\'t know") clears a kept answer. Answering a conflicted fact replaces the kept answer. Requires assessments:write.',
+        'Submit answers for open EU AI Act facts and re-derive the tier on this AIR Scan, with no new scan. Pass factPath + value + a short justification in the person\'s words. An array fact accepts only its allowedValues; any other word is refused with 422 naming the allowed values. Answers are kept on the project, so later scans start from them; null ("I don\'t know") clears a kept answer. Answering a conflicted fact replaces the kept answer. Requires assessments:write.',
       inputSchema: {
         assessmentPid: z.string(),
         answers: z
@@ -373,7 +373,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_stages,
       description:
-        'List per-stage checkpoint logs for an assessment run. Requires assessments:read.',
+        'List per-stage checkpoint logs for an AIR Scan. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_stages },
     },
@@ -391,7 +391,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_get_assessment_input_artifacts,
       description:
-        'List artifacts used as inputs when the assessment report was generated. Requires assessments:read.',
+        'List artifacts used as inputs when the AIR Scan report was generated. Requires assessments:read.',
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_get_assessment_input_artifacts },
     },
@@ -409,10 +409,10 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_create_assessment_draft,
       description:
-        'Create an assessment draft without starting the pipeline. Requires assessments:write.',
+        'Create an AIR Scan draft without starting the pipeline. Requires assessments:write.',
       inputSchema: {
         projectPid: z.string(),
-        name: z.string().describe('Display name for the assessment'),
+        name: z.string().describe('Display name for the AIR Scan'),
         artifactPids: z
           .array(z.string())
           .min(1)
@@ -435,7 +435,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_start_assessment,
       description:
-        'Start a risk assessment on a project. Consumes org credits and dispatches the risk pipeline. Requires assessments:write. Returns assessmentPid and reportUrl. Give the person the reportUrl link when the scan starts.',
+        'Start an AIR Scan on a project. Consumes org credits and dispatches the risk pipeline. Requires assessments:write. Returns assessmentPid and reportUrl. Give the person the reportUrl link when the scan starts.',
       inputSchema: {
         projectPid: z.string(),
         name: z.string().describe('Display name for the run'),
@@ -461,7 +461,7 @@ export const registerAssessmentTools = (server: McpServer, api: IntegratorApiCli
     {
       title: MCP_AIR_TOOL_TITLES.air_retry_assessment,
       description:
-        'Retry a failed assessment from the last completed stage. Requires assessments:write and consumes credits.',
+        'Retry a failed AIR Scan from the last completed stage. Requires assessments:write and consumes credits.',
       inputSchema: { assessmentPid: z.string() },
       annotations: { ...writeHint, title: MCP_AIR_TOOL_TITLES.air_retry_assessment },
     },
