@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@thalus-ai/mcp-air.svg)](https://www.npmjs.com/package/@thalus-ai/mcp-air)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-Connect AI assistants to [AIR](https://air.thalus.ai) (AI Responsibly) for governed risk assessments: discover projects, upload evidence, run assessments, and retrieve structured reports — from **Cursor**, **Claude Code**, **Claude Desktop**, **VS Code**, **Windsurf**, or any [Model Context Protocol](https://modelcontextprotocol.io/) client.
+Connect AI assistants to [AIR](https://air.thalus.ai) (AI Responsibly) for governed risk review with AIR Scans: discover projects, upload evidence, run AIR Scans, and retrieve structured reports — from **Cursor**, **Claude Code**, **Claude Desktop**, **VS Code**, **Windsurf**, or any [Model Context Protocol](https://modelcontextprotocol.io/) client.
 
 This package ships two transports:
 
@@ -12,7 +12,7 @@ This package ships two transports:
 | **stdio** (default) | Local IDE agents (Cursor, Claude Code, VS Code, …) | `npx @thalus-ai/mcp-air`, with or without a key      |
 | **Streamable HTTP** | Claude Directory / remote MCP clients              | Hosted at `https://mcp.air.thalus.ai/mcp` with OAuth |
 
-Local assessment workloads still execute on Thalus cloud via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). For stdio you provide a domain-scoped API key, or let the server store one when you create an account in chat; remote Directory clients authorize through the AIR portal (OAuth). No local database, worker, or Docker stack is required for stdio.
+Local AIR Scan workloads still execute on Thalus cloud via the [AIR Integrator API](https://air.thalus.ai/docs/guides/getting-started). For stdio you provide a domain-scoped API key, or let the server store one when you create an account in chat; remote Directory clients authorize through the AIR portal (OAuth). No local database, worker, or Docker stack is required for stdio.
 
 **No AIR account?** Create one from inside the conversation on the local server or the hosted connector — see [Starting without an account](#starting-without-an-account).
 
@@ -35,7 +35,7 @@ Local assessment workloads still execute on Thalus cloud via the [AIR Integrator
 ## Prerequisites
 
 - **Node.js 20+**
-- An [AIR](https://air.thalus.ai) organization with active billing (assessments consume credits) — or create one from the conversation, see [Starting without an account](#starting-without-an-account)
+- An [AIR](https://air.thalus.ai) organization with active billing (AIR Scans consume credits) — or create one from the conversation, see [Starting without an account](#starting-without-an-account)
 - A credential, from any of three sources — see [Credentials](#credentials). **None is needed to start**: with no credential the server boots in setup mode so you can create an account.
 
 ## Quick start
@@ -146,7 +146,7 @@ Creating an account in chat:
 3. Enter the code emailed to you, tick the terms box, and submit. The terms tick is read from the checkbox only; the model cannot set it, and the API refuses without it.
 4. On the remote transport, press the sign-in button: it gives your browser a session, so the OAuth consent screen appears directly next time. On stdio there is nothing more to do — the key is already stored and the full tool set is available.
 
-Your organization starts on the Free plan with one assessment credit per 30 days. Use `air_get_credit_balance` to see where you stand and `air_request_credits` to ask for more.
+Your organization starts on the Free plan with one AIR Scan credit per 30 days. Use `air_get_credit_balance` to see where you stand and `air_request_credits` to ask for more.
 
 Neither feedback nor a credit request asks the assistant for an email address. Thalus replies to the **organization owner**, or to an address you type yourself in the confirmation dialog. Only the unauthenticated case needs one from you, because there is no account to reply to.
 
@@ -198,7 +198,7 @@ Choose a portal preset when creating your key:
 
 | Preset                 | Use when                                                                         | Scopes (summary)                                                              |
 | ---------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| **`assessmentRunner`** | List domains/projects, start assessments, read reports on **existing** artifacts | `assessments:read/write`, `projects:read`, `domains:read`                     |
+| **`assessmentRunner`** | List domains/projects, start AIR Scans, read reports on **existing** artifacts | `assessments:read/write`, `projects:read`, `domains:read`                     |
 | **`fullPipeline`**     | Upload documents, search, domain portfolio, create projects                      | Above plus `projects:write`, `search:read`, `portfolio:read`, `domains:write` |
 
 | Capability                                                              | Minimum preset     |
@@ -242,7 +242,7 @@ Full walkthrough: [air.thalus.ai/docs/mcp-air-setup](https://air.thalus.ai/docs/
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Discovery**   | `air_list_domains`, `air_get_domain`, `air_list_projects`, `air_get_project`, `air_create_project`, `air_search`                                                                                                            |
 | **Documents**   | `air_list_documents`, `air_get_document_download_url`, `air_list_artifacts`, `air_get_artifact_text`, `air_upload_document_init`, `air_upload_document_complete`, `air_upload_document`                                             |
-| **Assessments** | `air_list_assessments`, `air_get_assessment`, `air_get_assessment_report`, `air_get_assessment_summary`, `air_list_open_facts`, `air_ask_open_facts`, `air_submit_fact_answers`, `air_get_assessment_stages`, `air_get_assessment_input_artifacts`, `air_create_assessment_draft`, `air_start_assessment`, `air_retry_assessment` |
+| **AIR Scans** | `air_list_assessments`, `air_get_assessment`, `air_get_assessment_report`, `air_get_assessment_summary`, `air_list_open_facts`, `air_ask_open_facts`, `air_submit_fact_answers`, `air_get_assessment_stages`, `air_get_assessment_input_artifacts`, `air_create_assessment_draft`, `air_start_assessment`, `air_retry_assessment` |
 | **Scan prep**   | `air_list_project_fact_answers`, `air_ask_screening_questions`, `air_save_prepared_answers`, `air_get_rules_notice`, `air_postpone_rules_notice`, `air_recheck_tier`                                                                                                            |
 | **Decisions**   | `air_list_project_decisions`, `air_record_project_decision`                                                                                                                                                                 |
 | **Portfolio**   | `air_get_domain_portfolio`                                                                                                                                                                                                  |
@@ -305,9 +305,9 @@ The section index lists every section with its serialized size and item count, s
 
 | URI pattern                                | Description                      |
 | ------------------------------------------ | -------------------------------- |
-| `air://assessments/{assessmentPid}/report` | Completed assessment report JSON |
+| `air://assessments/{assessmentPid}/report` | Completed AIR Scan report JSON |
 | `air://assessments/{assessmentPid}/stages` | Stage execution log              |
-| `air://projects/{projectPid}/assessments`  | Assessments for a project        |
+| `air://projects/{projectPid}/assessments`  | AIR Scans for a project        |
 
 ### App resource (1)
 
@@ -319,7 +319,7 @@ The section index lists every section with its serialized size and item count, s
 
 | Name                       | Purpose                                 |
 | -------------------------- | --------------------------------------- |
-| `run-assessment-workflow`  | End-to-end assessment workflow guidance |
+| `run-assessment-workflow`  | End-to-end AIR Scan workflow guidance |
 | `review-assessment-report` | Structured report review                |
 | `explore-portfolio`        | Domain portfolio exploration            |
 
@@ -363,7 +363,7 @@ pnpm test
 
 ## Privacy
 
-The AIR cloud (Thalus) processes the documents, project data, and account information you submit through this server in order to run assessments and generate reports. See the [Privacy Policy](https://air.thalus.ai/privacy) for details on data collection, usage and storage, third-party sharing, and retention. Contact `privacy@thalus.ai` with privacy questions.
+The AIR cloud (Thalus) processes the documents, project data, and account information you submit through this server in order to run AIR Scans and generate reports. See the [Privacy Policy](https://air.thalus.ai/privacy) for details on data collection, usage and storage, third-party sharing, and retention. Contact `privacy@thalus.ai` with privacy questions.
 
 ## License
 

@@ -15,7 +15,7 @@ export const registerAssessmentPrompts = (server: McpServer) => {
           content: {
             type: 'text',
             text: [
-              'Run a full AIR risk assessment workflow using the available air_* MCP tools.',
+              'Run a full AIR Scan workflow using the available air_* MCP tools.',
               projectPid !== undefined
                 ? `Start from projectPid: ${projectPid}.`
                 : 'Begin with air_list_domains and air_list_projects to pick a target project.',
@@ -35,9 +35,9 @@ export const registerAssessmentPrompts = (server: McpServer) => {
 
   server.prompt(
     'review-assessment-report',
-    'Fetch and summarize an assessment report by assessmentPid',
+    'Fetch and summarize an AIR Scan report by assessmentPid',
     {
-      assessmentPid: z.string().describe('Assessment pid (pasm_*)'),
+      assessmentPid: z.string().describe('AIR Scan pid (pasm_*)'),
     },
     async ({ assessmentPid }) => ({
       messages: [
@@ -46,7 +46,7 @@ export const registerAssessmentPrompts = (server: McpServer) => {
           content: {
             type: 'text',
             text: [
-              `Review AIR assessment ${assessmentPid}.`,
+              `Review AIR Scan ${assessmentPid}.`,
               'Start with air_get_assessment_summary, then pull the sections you need with air_get_assessment_report (section, plus offset/limit for list sections such as riskRegister).',
               'Summarize: project overview, top risk themes, control gaps, EU AI Act tier, and recommended next steps.',
             ].join('\n'),

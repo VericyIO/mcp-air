@@ -101,6 +101,6 @@ describe('currentStageLabel', () => {
   it('fails on a stage row without its step', () => {
     expect(() =>
       currentStageLabel([{ stageName: 'lens', label: 'EU AI Act tiering (legacy)', step: null, stepCount: 12, status: 'running' }]),
-    ).toThrow('Assessment stage is missing its label or step')
+    ).toThrow('AIR Scan stage is missing its label or step')
   })
 })

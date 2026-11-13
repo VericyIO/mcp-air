@@ -56,7 +56,7 @@ export const currentStageLabel = (
     typeof chosen.step !== 'number' ||
     typeof chosen.stepCount !== 'number'
   ) {
-    throw new Error('Assessment stage is missing its label or step')
+    throw new Error('AIR Scan stage is missing its label or step')
   }
   return `Step ${chosen.step} of ${chosen.stepCount}: ${chosen.label}`
 }
@@ -149,7 +149,7 @@ export const registerCompositeTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_wait_for_assessment,
       description:
-        'Wait until an assessment is completed, failed, or reportAvailable, or until its step differs from lastStageLabel, up to timeoutMs. Uses exponential backoff. A new step returns ready:false with stageLabel ("Step 4 of 12: Checking each risk theme"), the line to show the person, and reportUrl. Call again with lastStageLabel set to the line you showed. Returns ready:false with the last observed status if the wait budget runs out — call again to keep waiting. Requires assessments:read.',
+        'Wait until an AIR Scan is completed, failed, or reportAvailable, or until its step differs from lastStageLabel, up to timeoutMs. Uses exponential backoff. A new step returns ready:false with stageLabel ("Step 4 of 12: Checking each risk theme"), the line to show the person, and reportUrl. Call again with lastStageLabel set to the line you showed. Returns ready:false with the last observed status if the wait budget runs out — call again to keep waiting. Requires assessments:read.',
       inputSchema: {
         assessmentPid: z.string(),
         timeoutMs: z
@@ -224,7 +224,7 @@ export const registerCompositeTools = (
             assessment: outcome.last,
             ...(typeof announcedLabel === 'string' ? { stageLabel: announcedLabel } : {}),
             ...(typeof reportUrl === 'string' ? { reportUrl } : {}),
-            note: `Assessment is still running after ${timeout}ms. Call air_wait_for_assessment again with the same assessmentPid and lastStageLabel to keep waiting.`,
+            note: `AIR Scan is still running after ${timeout}ms. Call air_wait_for_assessment again with the same assessmentPid and lastStageLabel to keep waiting.`,
           })
         }
 
@@ -241,11 +241,11 @@ export const registerCompositeTools = (
       {
         title: MCP_AIR_TOOL_TITLES.air_run_assessment_from_file,
         description:
-          'Upload a local file, wait for extraction, start assessment on the new artifact. Consumes credits. Requires projects:write and assessments:write. Returns an MCP Task handle immediately. Reads filePath with your OS user permissions.',
+          'Upload a local file, wait for extraction, start an AIR Scan on the new artifact. Consumes credits. Requires projects:write and assessments:write. Returns an MCP Task handle immediately. Reads filePath with your OS user permissions.',
         inputSchema: {
           projectPid: z.string(),
           filePath: z.string().describe('Absolute or relative path to a local document file'),
-          name: z.string().optional().describe('Assessment name (defaults to filename)'),
+          name: z.string().optional().describe('AIR Scan name (defaults to filename)'),
           contentType: z
             .string()
             .optional()
@@ -288,7 +288,7 @@ export const registerCompositeTools = (
       {
         title: MCP_AIR_TOOL_TITLES.air_run_full_assessment_pipeline,
         description:
-          'Start assessment on existing artifacts, wait for completion, return report summary. Consumes credits. Returns an MCP Task handle immediately; poll tasks/get until completed.',
+          'Start an AIR Scan on existing artifacts, wait for completion, return report summary. Consumes credits. Returns an MCP Task handle immediately; poll tasks/get until completed.',
         inputSchema: {
           projectPid: z.string(),
           artifactPids: z.array(z.string()).min(1).max(5),

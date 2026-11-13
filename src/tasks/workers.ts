@@ -110,7 +110,7 @@ export const runWaitForAssessmentTask = async (
           taskId,
           toolErrorResult(
             new Error(
-              `Assessment ${assessmentPid} is still a draft — start it with air_start_assessment before waiting`,
+              `AIR Scan ${assessmentPid} is still a draft — start it with air_start_assessment before waiting`,
             ),
             toolName,
           ),
@@ -118,7 +118,7 @@ export const runWaitForAssessmentTask = async (
         return
       }
 
-      if (!(await updateTaskProgress(taskStore, taskId, `Assessment status: ${status}`))) {
+      if (!(await updateTaskProgress(taskStore, taskId, `AIR Scan status: ${status}`))) {
         return
       }
 
@@ -138,7 +138,7 @@ export const runWaitForAssessmentTask = async (
     await failAirTask(
       taskStore,
       taskId,
-      toolErrorResult(new Error(`Timed out waiting for assessment ${assessmentPid}`), toolName),
+      toolErrorResult(new Error(`Timed out waiting for AIR Scan ${assessmentPid}`), toolName),
     )
   } catch (error) {
     await failAirTask(taskStore, taskId, toolErrorResult(error, toolName))
@@ -156,7 +156,7 @@ export const runFullAssessmentPipelineTask = async (
 ): Promise<void> => {
   const toolName = 'air_run_full_assessment_pipeline'
   try {
-    if (!(await updateTaskProgress(taskStore, taskId, 'Starting assessment...'))) {
+    if (!(await updateTaskProgress(taskStore, taskId, 'Starting AIR Scan...'))) {
       return
     }
 
@@ -173,7 +173,7 @@ export const runFullAssessmentPipelineTask = async (
       const assessment = await api.getAssessment(assessmentPid)
       const status = String(assessment.status)
 
-      if (!(await updateTaskProgress(taskStore, taskId, `Assessment status: ${status}`))) {
+      if (!(await updateTaskProgress(taskStore, taskId, `AIR Scan status: ${status}`))) {
         return
       }
 
@@ -209,7 +209,7 @@ export const runFullAssessmentPipelineTask = async (
     await failAirTask(
       taskStore,
       taskId,
-      toolErrorResult(new Error('Timed out waiting for assessment to complete'), toolName),
+      toolErrorResult(new Error('Timed out waiting for AIR Scan to complete'), toolName),
     )
   } catch (error) {
     await failAirTask(taskStore, taskId, toolErrorResult(error, toolName))
@@ -296,7 +296,7 @@ export const runAssessmentFromFileTask = async (
       !(await updateTaskProgress(
         taskStore,
         taskId,
-        'Starting assessment on extracted artifacts...',
+        'Starting AIR Scan on extracted artifacts...',
       ))
     ) {
       return
@@ -316,7 +316,7 @@ export const runAssessmentFromFileTask = async (
       return
     }
 
-    const assessmentName = name ?? `MCP assessment - ${filename}`
+    const assessmentName = name ?? `MCP AIR Scan - ${filename}`
     const started = await api.startAssessment(projectPid, assessmentName, artifactPids.slice(0, 5))
 
     await completeAirTask(

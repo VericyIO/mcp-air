@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.thalus/air-assessments",
-  "description": "Run AIR risk assessments, upload evidence, and read reports via the integrator API.",
+  "description": "Run AIR Scans, upload evidence, and read reports via the integrator API.",
   "version": "1.5.0",
   "packages": [
     {

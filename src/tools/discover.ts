@@ -29,7 +29,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_list_domains,
       description:
-        "List domains visible to the API key. For domain-scoped service account keys, returns the single bound domain. Requires domains:read scope.",
+        "List domains visible to the API key. For domain-scoped service account keys, returns the single bound domain. Requires domains:read scope. Each result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the domain.",
       inputSchema: {},
       annotations: { ...readOnly, title: MCP_AIR_TOOL_TITLES.air_list_domains },
     },
@@ -47,7 +47,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_get_domain,
       description:
-        "Resolve a domain by pid from air_list_domains results, or by orgSlug + domainSlug via slug lookup.",
+        "Resolve a domain by pid from air_list_domains results, or by orgSlug + domainSlug via slug lookup. The result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the domain.",
       inputSchema: {
         domainPid: z
           .string()
@@ -89,7 +89,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_list_projects,
       description:
-        "List projects in a domain (paginated). Requires domains:read and projects:read. Use domainPid from air_list_domains.",
+        "List projects in a domain (paginated). Requires domains:read and projects:read. Use domainPid from air_list_domains. Each result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the project.",
       inputSchema: {
         domainPid: z.string().describe("Domain pid"),
         page: z
@@ -128,7 +128,7 @@ export const registerDiscoverTools = (
     {
       title: MCP_AIR_TOOL_TITLES.air_get_project,
       description:
-        "Resolve a project by pid from air_list_projects, or by orgSlug + domainSlug + projectSlug.",
+        "Resolve a project by pid from air_list_projects, or by orgSlug + domainSlug + projectSlug. The result has webUrl, the page in the AIR web app; give the person that link when they ask where to see the project.",
       inputSchema: {
         projectPid: z
           .string()

@@ -101,7 +101,7 @@ export const formatIntegratorApiError = (status: number, body: string): string =
     case 401:
       return `AIR API authentication failed (401). Verify ${'AIR_API_KEY'} is valid and not revoked. See https://air.thalus.ai/docs/guides/getting-started`
     case 403:
-      return `AIR API forbidden (403). Your API key may lack the required scope for this operation. Use assessmentRunner for assess-only flows or fullPipeline for uploads, search, and portfolio. Response: ${detail}`
+      return `AIR API forbidden (403). Your API key may lack the required scope for this operation. Use assessmentRunner for AIR Scan-only flows or fullPipeline for uploads, search, and portfolio. Response: ${detail}`
     case 404:
       return `AIR API not found (404). Check domainPid, projectPid, or assessmentPid. Response: ${detail}`
     case 409:

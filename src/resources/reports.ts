@@ -15,7 +15,7 @@ export const registerReportResources = (server: McpServer, api: IntegratorApiCli
     'assessment-report',
     new ResourceTemplate(MCP_AIR_ASSESSMENT_REPORT_URI_TEMPLATE, { list: noResourceListing }),
     {
-      description: 'Full AssessmentReport JSON for a completed assessment',
+      description: 'Full AssessmentReport JSON for a completed AIR Scan',
       mimeType: 'application/json',
     },
     async (uri) =>
@@ -38,7 +38,7 @@ export const registerReportResources = (server: McpServer, api: IntegratorApiCli
     'assessment-stages',
     new ResourceTemplate(MCP_AIR_ASSESSMENT_STAGES_URI_TEMPLATE, { list: noResourceListing }),
     {
-      description: 'Assessment stage checkpoint logs',
+      description: 'AIR Scan stage checkpoint logs',
       mimeType: 'application/json',
     },
     async (uri) =>
@@ -61,7 +61,7 @@ export const registerReportResources = (server: McpServer, api: IntegratorApiCli
     'project-assessments',
     new ResourceTemplate(MCP_AIR_PROJECT_ASSESSMENTS_URI_TEMPLATE, { list: noResourceListing }),
     {
-      description: 'Assessment list summary for a project',
+      description: 'AIR Scan list summary for a project',
       mimeType: 'application/json',
     },
     async (uri) =>
@@ -85,7 +85,7 @@ const parseAssessmentPidFromReportUri = (uri: string): string => {
   const match = /^air:\/\/assessments\/([^/]+)\/report$/.exec(uri)
   const assessmentPid = match?.[1]
   if (assessmentPid === undefined) {
-    throw new Error(`Invalid assessment report URI: ${uri}`)
+    throw new Error(`Invalid AIR Scan report URI: ${uri}`)
   }
   return assessmentPid
 }
@@ -94,7 +94,7 @@ const parseAssessmentPidFromStagesUri = (uri: string): string => {
   const match = /^air:\/\/assessments\/([^/]+)\/stages$/.exec(uri)
   const assessmentPid = match?.[1]
   if (assessmentPid === undefined) {
-    throw new Error(`Invalid assessment stages URI: ${uri}`)
+    throw new Error(`Invalid AIR Scan stages URI: ${uri}`)
   }
   return assessmentPid
 }
@@ -103,7 +103,7 @@ const parseProjectPidFromListUri = (uri: string): string => {
   const match = /^air:\/\/projects\/([^/]+)\/assessments$/.exec(uri)
   const projectPid = match?.[1]
   if (projectPid === undefined) {
-    throw new Error(`Invalid project assessments URI: ${uri}`)
+    throw new Error(`Invalid project AIR Scans URI: ${uri}`)
   }
   return projectPid
 }
